@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+:root {
+  --color-surface: #f1eee6;
+  --color-on-surface: #10243b;
+  --color-primary: #10243b;
+  --color-secondary: #1d3b5b;
+  --color-emerald: #087f5b;
+  --color-amber: #d9b45c;
+  --color-slate: #64748b;
+}
+
+body {
+  background: #f1eee6;
+}
