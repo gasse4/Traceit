@@ -21,6 +21,7 @@ const translations = {
     "nav.search": "البحث",
     "nav.language": "تغيير اللغة",
     "nav.theme": "تبديل الوضع الليلي",
+    "nav.support": "ادعمنا بنجمة",
 
     /* --- Footer --- */
     "footer.note": "ملاحظة: ",
@@ -137,6 +138,7 @@ const translations = {
     "nav.search": "Search",
     "nav.language": "Change language",
     "nav.theme": "Toggle dark mode",
+    "nav.support": "Support us with a star",
 
     /* --- Footer --- */
     "footer.note": "Note: ",
@@ -324,4 +326,3 @@ export function LanguageProvider({ children }) {
     <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>
   );
 }
-
