@@ -78,7 +78,8 @@ TraceIt/
     └── tests/
         ├── conftest.py          # إعداد الاختبارات المشتركة
         ├── test_algorithms.py   # اختبارات وحدة للخوارزميات
-        └── test_api.py          # اختبارات تكامل لـ API
+        ├── test_api.py          # اختبارات تكامل لـ API
+        └── test_embeddings.py   # اختبارات وحدة لتضمين CLIP و DINOv2
 ```
 
 ---
@@ -267,6 +268,21 @@ python app.py
 # uvicorn app:app --reload --port 5000
 ```
 
+### متغيرات البيئة (اختياري)
+
+| المتغير | القيمة الافتراضية | الغرض |
+|--------|-------------------|-------|
+| `TRACEIT_CLIP_ENABLED` | `1` | قم بتعيينه إلى `0` لتعطيل تحميل نموذج CLIP (تسريع الاختبارات/التشغيل بدون نماذج) |
+| `TRACEIT_DINO_ENABLED` | `1` | قم بتعيينه إلى `0` لتعطيل تحميل نموذج DINOv2 |
+| `TRACEIT_CLIP_MODEL` | `openai/clip-vit-base-patch32` | اسم نموذج CLIP من Hugging Face |
+| `TRACEIT_DINO_MODEL` | `facebook/dinov2-small` | اسم نموذج DINOv2 من Hugging Face |
+| `TRACEIT_DB` | `backend/traceit.db` | مسار ملف قاعدة بيانات SQLite |
+| `TRACEIT_UPLOADS` | `backend/uploads` | مجلد تخزين الصور المرفوعة |
+| `TRACEIT_CORS_ORIGINS` | `*` | أصول CORS المسموح بها (مفصولة بفاصلة) |
+| `TRACEIT_PORT` | `5000` | منفذ تشغيل الخادم |
+
+يتم تنزيل أوزان نماذج CLIP و DINOv2 تلقائياً من Hugging Face عند第一次 تشغيل الخادم وتخزينها في كاش محلي (~90 ميجابايت إجمالاً). يمكن تعطيل أي منهما عبر المتغيرات أعلاه.
+
 ### تشغيل الواجهة الأمامية (Frontend)
 ```bash
 cd frontend
@@ -280,7 +296,7 @@ npm run dev
 
 ## 10. الاختبارات
 
-جميع الاختبارات تنجح حالياً (121 اختبار).
+جميع الاختبارات تنجح حالياً (137 اختبار).
 
 ### تشغيل الاختبارات
 ```bash
