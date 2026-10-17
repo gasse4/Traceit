@@ -20,6 +20,10 @@ export default function ReportForm({ type }) {
     e.preventDefault();
     setMessage("");
     setError("");
+    if (Object.values(form).some((v) => !v.trim())) {
+      setError("الرجاء تعبئة جميع الحقول المطلوبة (لا تكفي المسافات الفارغة).");
+      return;
+    }
     const fd = new FormData();
     Object.entries(form).forEach(([k, v]) => fd.append(k, v.trim()));
     if (image) fd.append("image", image);

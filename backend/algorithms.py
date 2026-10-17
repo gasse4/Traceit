@@ -52,6 +52,7 @@ def calculate_phash(img):
     pixels = np.asarray(small, dtype=np.float64)
 
     low_freq = DCT_BASIS @ pixels @ DCT_BASIS.T  # 8x8 = DCT along rows, then columns
+    low_freq = low_freq.round(6)  # drop float noise so exact zeros compare as equal
     bits = (low_freq > np.median(low_freq)).flatten()
 
     value = 0

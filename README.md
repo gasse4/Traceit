@@ -58,6 +58,21 @@ TraceIt/
     └── requirements.txt
 ```
 
+## Tests
+Both suites use a throwaway database and uploads folder — your real data is never touched.
+
+```bash
+# Backend: algorithms + every API endpoint (pytest)
+cd backend
+pip install -r requirements-dev.txt
+python -m pytest -q
+
+# Frontend: real browser (desktop + mobile) against the real backend (Playwright)
+cd frontend
+npx playwright install chromium   # first time only
+npm run test:e2e
+```
+
 ## Configuration
 | Variable | Default | Purpose |
 |---|---|---|

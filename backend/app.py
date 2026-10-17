@@ -17,13 +17,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from algorithms import calculate_phash, image_search, linear_search
 from database import add_report, get_active_reports, get_stats, init_db
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+UPLOAD_DIR = os.environ.get("TRACEIT_UPLOADS", os.path.join(BASE_DIR, "uploads"))
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_IMAGE_PIXELS = 60_000_000  # ~60 MP: real photos pass, decompression bombs do not
 THUMB_SIZE = (600, 600)  # cards load this small copy, not the original
 ALLOWED_FORMATS = {"JPEG": "jpg", "PNG": "png"}  # Pillow format -> file extension
 CORS_ORIGINS = os.environ.get("TRACEIT_CORS_ORIGINS", "*").split(",")
@@ -45,8 +47,9 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # ---------- Errors: always answer with { "error": "..." } ----------
 
-@app.exception_handler(HTTPException)
-async def http_error(_request: Request, exc: HTTPException):
+# Starlette's base class also covers framework errors such as unknown routes (404).
+@app.exception_handler(StarletteHTTPException)
+async def http_error(_request: Request, exc: StarletteHTTPException):
     return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
 
 
@@ -69,19 +72,22 @@ def read_image(upload: UploadFile):
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(413, "image is larger than 10 MB")
     try:
-        img = Image.open(io.BytesIO(data))
+        img = Image.open(io.BytesIO(data))  # reads the header only
         fmt = img.format
         if fmt not in ALLOWED_FORMATS:
             raise HTTPException(400, "only JPG and PNG images are supported")
+        if img.width * img.height > MAX_IMAGE_PIXELS:
+            raise HTTPException(400, "image dimensions are too large")
+        img.load()  # decode now so corrupt/truncated files fail here, not later
         # Phone photos store rotation in EXIF; apply it so hash and display are upright.
         img = ImageOps.exif_transpose(img)
-    except (UnidentifiedImageError, OSError):
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, SyntaxError):
         raise HTTPException(400, "file is not a valid image")
     return data, img, ALLOWED_FORMATS[fmt]
 
 
 def thumb_path_for(image_path):
-    """uploads/found_x.png -> uploads/found_x_thumb.jpg"""
+    """found_x.png -> found_x_thumb.jpg (works for file names and URL paths)."""
     return os.path.splitext(image_path)[0] + "_thumb.jpg"
 
 
@@ -130,10 +136,11 @@ def create_report(report_type, name, description, location, color, image):
         data, img, ext = read_image(image)
         image_phash = calculate_phash(img)
         # Name comes from a UUID, never from the user's filename.
-        image_path = f"uploads/{report_type}_{uuid.uuid4().hex}.{ext}"
-        with open(os.path.join(BASE_DIR, image_path), "wb") as f:
+        file_name = f"{report_type}_{uuid.uuid4().hex}.{ext}"
+        with open(os.path.join(UPLOAD_DIR, file_name), "wb") as f:
             f.write(data)
-        save_thumbnail(img, os.path.join(BASE_DIR, thumb_path_for(image_path)))
+        save_thumbnail(img, os.path.join(UPLOAD_DIR, thumb_path_for(file_name)))
+        image_path = f"uploads/{file_name}"  # URL path, served by the /uploads mount
 
     new_id = add_report({"type": report_type, **fields, "image_path": image_path, "image_phash": image_phash})
     return {"id": new_id, "message": "report created"}
