@@ -1,8 +1,8 @@
 """Search and image-matching algorithms for TraceIt.
 
 Text uses a hand-written linear search. Image matching combines hand-written
-perceptual hashing (pHash) + Hamming Distance with optional OpenCV ORB and
-CLIP embeddings for higher accuracy.
+perceptual hashing (pHash) + Hamming Distance with OpenCV ORB features and
+DINOv2 / CLIP embeddings for higher accuracy.
 """
 
 import math
@@ -23,6 +23,37 @@ PHASH_HASH_SIZE = 8
 _n = np.arange(PHASH_IMG_SIZE)
 _k = np.arange(PHASH_HASH_SIZE)[:, None]
 DCT_BASIS = np.cos(math.pi * (2 * _n + 1) * _k / (2 * PHASH_IMG_SIZE))
+
+
+def crop_to_content(img, background_threshold=245, padding=8):
+    """Remove a near-white border so screenshots and originals share a frame."""
+    pixels = np.asarray(img.convert("RGB"))
+    content = np.any(pixels < background_threshold, axis=2)
+    coordinates = np.argwhere(content)
+    if coordinates.size == 0:
+        return img
+    top, left = coordinates.min(axis=0)
+    bottom, right = coordinates.max(axis=0) + 1
+    return img.crop((
+        max(0, left - padding),
+        max(0, top - padding),
+        min(img.width, right + padding),
+        min(img.height, bottom + padding),
+    ))
+
+
+def image_variants(img):
+    """Return orientation and mirror variants for robust image matching."""
+    variants = []
+    for mirrored in (False, True):
+        base = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if mirrored else img
+        for angle in (0, 90, 180, 270):
+            variant = base.rotate(angle, expand=True)
+            if not any(variant.size == existing.size and np.array_equal(
+                np.asarray(variant), np.asarray(existing)
+            ) for existing in variants):
+                variants.append(variant)
+    return variants
 
 
 def normalize_search_text(value):
@@ -60,7 +91,7 @@ def linear_search(reports, search_query):
 
 
 def calculate_phash(img):
-    """Compute the 64-bit perceptual hash (pHash) of a PIL image as 16 hex characters.
+    """Compute the 64-bit perceptual hash (pHash) of a PIL image as 16 hex chars.
 
     1. Shrink to 32x32 grayscale (drops detail and color, keeps overall structure).
     2. 2D DCT, keeping only the top-left 8x8 block (the lowest frequencies).
@@ -118,7 +149,11 @@ def calculate_similarity(distance, bit_length):
 
 
 def calculate_orb_similarity(query_img, candidate_img):
-    """Compare local ORB features and return a conservative 0-100 score."""
+    """Compare geometrically consistent local ORB features.
+
+    A ratio-test match alone can be a coincidental descriptor match. Keeping
+    only RANSAC inliers makes the score reflect one shared image transform.
+    """
     def descriptors(img):
         pixels = np.asarray(img.convert("RGB"))
         gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
@@ -132,9 +167,22 @@ def calculate_orb_similarity(query_img, candidate_img):
     matches = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(
         query_descriptors, candidate_descriptors, k=2
     )
-    good_matches = [first for first, second in matches if first.distance < 0.75 * second.distance]
+    good_matches = [
+        first for first, second in matches
+        if second is not None and first.distance < 0.75 * second.distance
+    ]
+    if len(good_matches) < 4:
+        return 0.0
+
+    source = np.float32([query_keypoints[m.queryIdx].pt for m in good_matches])
+    target = np.float32([candidate_keypoints[m.trainIdx].pt for m in good_matches])
+    _, inlier_mask = cv2.findHomography(source, target, cv2.RANSAC, 5.0)
+    if inlier_mask is None:
+        return 0.0
+
+    inliers = int(inlier_mask.ravel().sum())
     denominator = max(1, min(len(query_keypoints), len(candidate_keypoints)))
-    return round(min(100.0, len(good_matches) / denominator * 100.0), 2)
+    return round(min(100.0, inliers / denominator * 100.0), 2)
 
 
 def calculate_match_score(phash_distance, dhash_distance=None, color_distance=None):
@@ -162,7 +210,13 @@ def calculate_match_score(phash_distance, dhash_distance=None, color_distance=No
     return round(100 * sum(score * weight for score, weight in available) / total_weight, 2)
 
 
-def image_search(reports, query_hash, query_dhash=None, query_color_hash=None):
+def image_search(
+    reports,
+    query_hash,
+    query_dhash=None,
+    query_color_hash=None,
+    query_alternates=None,
+):
     """Score every report with a stored pHash against the query image.
 
     Results include the legacy pHash fields plus the combined ``match_score``
@@ -171,23 +225,65 @@ def image_search(reports, query_hash, query_dhash=None, query_color_hash=None):
     bit_length = len(query_hash) * 4
     scored = []
     for report in reports:
-        distance = hamming_distance(query_hash, report.get("image_phash"))
-        if distance is None:
+        candidates = [(query_hash, query_dhash, query_color_hash)]
+        if query_alternates:
+            candidates.extend(query_alternates)
+        if report.get("image_hash_variants") and report.get("query_hash_variants"):
+            candidates.extend([
+                (query_values[0], query_values[1], query_values[2], report_values)
+                for query_values in report["query_hash_variants"]
+                for report_values in [report["image_hash_variants"]]
+            ])
+        best = None
+        for index, candidate in enumerate(candidates):
+            candidate_hash, candidate_dhash, candidate_color_hash = candidate[:3]
+            if len(candidate) == 4:
+                report_candidates = candidate[3]
+                for report_hash, report_dhash, report_color_hash in report_candidates:
+                    candidate_distance = hamming_distance(candidate_hash, report_hash)
+                    if candidate_distance is None:
+                        continue
+                    candidate_edge = hamming_distance(candidate_dhash, report_dhash)
+                    candidate_color = hamming_distance(candidate_color_hash, report_color_hash)
+                    candidate_score = calculate_match_score(candidate_distance, candidate_edge, candidate_color)
+                    if best is None or candidate_score > best[0]:
+                        best = (candidate_score, candidate_distance, candidate_edge, candidate_color)
+                continue
+            candidate_report_hash = report.get("image_phash") if index == 0 else report.get("image_phash_original")
+            report_dhash = report.get("image_dhash") if index == 0 else report.get("image_dhash_original")
+            report_color_hash = report.get("image_color_hash") if index == 0 else report.get("image_color_hash_original")
+            candidate_distance = hamming_distance(candidate_hash, candidate_report_hash)
+            if candidate_distance is None:
+                continue
+            candidate_edge = (
+                hamming_distance(candidate_dhash, report_dhash)
+                if candidate_dhash and report_dhash else None
+            )
+            candidate_color = (
+                hamming_distance(candidate_color_hash, report_color_hash)
+                if candidate_color_hash and report_color_hash else None
+            )
+            candidate_score = calculate_match_score(candidate_distance, candidate_edge, candidate_color)
+            if best is None or candidate_score > best[0]:
+                best = (candidate_score, candidate_distance, candidate_edge, candidate_color)
+        if best is None:
             continue
-        if query_dhash and report.get("image_dhash"):
-            edge_distance = hamming_distance(query_dhash, report["image_dhash"])
-        else:
-            edge_distance = None
-        color_distance = None
-        if query_color_hash and report.get("image_color_hash"):
-            color_distance = hamming_distance(query_color_hash, report["image_color_hash"])
-        match_score = calculate_match_score(distance, edge_distance, color_distance)
+        base_score, distance, edge_distance, color_distance = best
+        match_score = base_score
         orb_similarity = report.get("orb_similarity")
-        if orb_similarity is not None:
-            match_score = round(match_score * 0.65 + orb_similarity * 0.35, 2)
+        if orb_similarity is not None and orb_similarity > base_score:
+            match_score = round(base_score * 0.70 + orb_similarity * 0.30, 2)
         clip_score = report.get("clip_similarity")
-        if clip_score is not None:
+        # CLIP recognizes semantic categories (e.g. "earbuds"), not identity.
+        # It may refine a structurally plausible match, but must not rescue a
+        # candidate whose hashes disagree strongly.
+        if clip_score is not None and base_score >= 50:
             match_score = round(match_score * 0.45 + clip_score * 0.55, 2)
+        dino_score = report.get("dino_similarity")
+        # DINOv2 tracks the depicted instance, so it rescues matches the
+        # hashes cannot see (same item re-photographed, mirrored, rescaled).
+        if dino_score is not None:
+            match_score = max(match_score, dino_score)
         scored.append({
             **report,
             "hamming_distance": distance,
@@ -195,6 +291,7 @@ def image_search(reports, query_hash, query_dhash=None, query_color_hash=None):
             "visual_similarity": match_score,
             "match_score": match_score,
             "orb_similarity": orb_similarity,
+            "dino_similarity": dino_score,
             "edge_distance": edge_distance,
         })
     scored.sort(key=lambda r: (-r["match_score"], r["hamming_distance"]))

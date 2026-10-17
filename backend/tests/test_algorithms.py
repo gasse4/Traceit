@@ -5,7 +5,7 @@ import io
 import pytest
 from PIL import Image
 
-from algorithms import calculate_match_score, calculate_phash, calculate_similarity, hamming_distance, image_search, linear_search
+from algorithms import calculate_match_score, calculate_phash, calculate_similarity, crop_to_content, hamming_distance, image_search, linear_search
 from conftest import circle, gradient, stripes, to_bytes
 
 
@@ -61,6 +61,10 @@ class TestLinearSearch:
 # ---------- pHash ----------
 
 class TestPhash:
+    def test_crop_to_content_removes_white_border(self):
+        cropped = crop_to_content(Image.new("RGB", (100, 100), "white"))
+        assert cropped.size == (100, 100)
+
     # Reference values produced by imagehash.phash (ImageHash 4.3.2) on the same images.
     @pytest.mark.parametrize("make, expected", [
         (circle, "e1979678186561d7"),
@@ -162,3 +166,22 @@ class TestImageSearch:
 
     def test_no_reports(self):
         assert image_search([], "0000000000000000") == []
+
+    def test_dino_embedding_rescues_a_match_the_hashes_miss(self):
+        # A different photo of the same item: hashes disagree, DINOv2 agrees.
+        reports = [report(1, image_phash="ffffffffffffffff")]
+        reports[0]["dino_similarity"] = 91.5
+        [out] = image_search(reports, "0000000000000000")
+        assert out["match_score"] == 91.5
+        assert out["dino_similarity"] == 91.5
+
+    def test_low_dino_score_never_lowers_a_hash_match(self):
+        reports = [report(1, image_phash="0000000000000000")]
+        reports[0]["dino_similarity"] = 12.0
+        [out] = image_search(reports, "0000000000000000")
+        assert out["match_score"] == 100.0
+
+    def test_missing_dino_score_is_tolerated(self):
+        [out] = image_search([report(1, image_phash="0000000000000000")], "0000000000000000")
+        assert out["match_score"] == 100.0
+        assert out["dino_similarity"] is None

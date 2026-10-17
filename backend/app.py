@@ -19,12 +19,19 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from embeddings import calculate_clip_embedding, clip_similarity
+from embeddings import (
+    calculate_clip_embedding,
+    calculate_dino_embedding,
+    clip_similarity,
+    dino_similarity,
+)
 from algorithms import (
     calculate_color_hash,
     calculate_dhash,
     calculate_orb_similarity,
     calculate_phash,
+    crop_to_content,
+    image_variants,
     image_search,
     linear_search,
 )
@@ -38,6 +45,7 @@ THUMB_SIZE = (600, 600)  # cards load this small copy, not the original
 ALLOWED_FORMATS = {"JPEG": "jpg", "PNG": "png"}  # Pillow format -> file extension
 CORS_ORIGINS = os.environ.get("TRACEIT_CORS_ORIGINS", "*").split(",")
 DISCLAIMER = "Results are probable only. Verify ownership manually before handover."
+MIN_IMAGE_MATCH_SCORE = 50.0
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -139,13 +147,17 @@ def create_report(report_type, name, description, location, color, image):
     if missing:
         raise HTTPException(400, f"required field(s): {', '.join(missing)}")
 
-    image_path = image_phash = image_dhash = image_color_hash = image_embedding = None
+    image_path = image_phash = image_dhash = image_color_hash = image_embedding = image_dino_embedding = None
     if image and image.filename:
         data, img, ext = read_image(image)
         image_phash = calculate_phash(img)
         image_dhash = calculate_dhash(img)
         image_color_hash = calculate_color_hash(img)
-        image_embedding = calculate_clip_embedding(img)
+        # Embeddings use the cropped content so a screenshot of an item and a
+        # direct photo of it live in the same frame.
+        content = crop_to_content(img)
+        image_embedding = calculate_clip_embedding(content)
+        image_dino_embedding = calculate_dino_embedding(content)
         # Name comes from a UUID, never from the user's filename.
         file_name = f"{report_type}_{uuid.uuid4().hex}.{ext}"
         with open(os.path.join(UPLOAD_DIR, file_name), "wb") as f:
@@ -157,6 +169,7 @@ def create_report(report_type, name, description, location, color, image):
         "type": report_type, **fields, "image_path": image_path,
         "image_phash": image_phash, "image_dhash": image_dhash,
         "image_color_hash": image_color_hash, "image_embedding": image_embedding,
+        "image_dino_embedding": image_dino_embedding,
     })
     return {"id": new_id, "message": "report created"}
 
@@ -197,10 +210,23 @@ def search_text(q: str = ""):
 def search_image(image: Annotated[UploadFile, File()]):
     # The query image is hashed in memory and never written to disk.
     _, img, _ = read_image(image)
-    query_hash = calculate_phash(img)
-    query_dhash = calculate_dhash(img)
-    query_color_hash = calculate_color_hash(img)
-    query_embedding = calculate_clip_embedding(img)
+    query_content = crop_to_content(img)
+    query_images = image_variants(query_content)
+    query_hash_variants = [
+        (calculate_phash(item), calculate_dhash(item), calculate_color_hash(item))
+        for item in query_images
+    ]
+    query_hash, query_dhash, query_color_hash = query_hash_variants[0]
+    query_alternates = [(calculate_phash(img), calculate_dhash(img), calculate_color_hash(img))]
+    query_embedding = calculate_clip_embedding(query_content)
+    # DINOv2 is only robust to mild transforms, so the embedding score is the
+    # best over every mirrored/rotated variant of the query. The hash branch
+    # already compares the same variants; this keeps both signals consistent.
+    query_dino_embeddings = [
+        vector
+        for vector in (calculate_dino_embedding(item) for item in query_images)
+        if vector
+    ]
     reports = get_active_reports(with_image_only=True)  # rows without a hash can't match
     for report in reports:
         if not report.get("image_path"):
@@ -208,15 +234,49 @@ def search_image(image: Annotated[UploadFile, File()]):
         stored_path = os.path.join(UPLOAD_DIR, os.path.basename(report["image_path"]))
         if os.path.isfile(stored_path):
             with Image.open(stored_path) as stored_image:
-                if not report.get("image_dhash"):
-                    report["image_dhash"] = calculate_dhash(stored_image)
-                if not report.get("image_color_hash"):
-                    report["image_color_hash"] = calculate_color_hash(stored_image)
-                report["orb_similarity"] = calculate_orb_similarity(img, stored_image)
+                # Match the orientation used when the report was created.
+                stored_image = ImageOps.exif_transpose(stored_image)
+                stored_content = crop_to_content(stored_image)
+                stored_images = image_variants(stored_content)
+                report["image_hash_variants"] = [
+                    (calculate_phash(item), calculate_dhash(item), calculate_color_hash(item))
+                    for item in stored_images
+                ]
+                report["query_hash_variants"] = query_hash_variants
+                # Recompute search fingerprints on the content crop. Stored
+                # legacy hashes remain unchanged for backward compatibility.
+                report["image_phash"] = calculate_phash(stored_content)
+                report["image_dhash"] = calculate_dhash(stored_content)
+                report["image_color_hash"] = calculate_color_hash(stored_content)
+                report["image_phash_original"] = calculate_phash(stored_image)
+                report["image_dhash_original"] = calculate_dhash(stored_image)
+                report["image_color_hash_original"] = calculate_color_hash(stored_image)
+                report["orb_similarity"] = max(
+                    calculate_orb_similarity(query_item, stored_item)
+                    for query_item in query_images
+                    for stored_item in stored_images
+                )
                 if not report.get("image_embedding"):
-                    report["image_embedding"] = calculate_clip_embedding(stored_image)
+                    report["image_embedding"] = calculate_clip_embedding(stored_content)
                 report["clip_similarity"] = clip_similarity(query_embedding, report.get("image_embedding"))
-    results = [public(r) for r in image_search(reports, query_hash, query_dhash, query_color_hash)]
+                if not report.get("image_dino_embedding"):
+                    report["image_dino_embedding"] = calculate_dino_embedding(stored_content)
+                stored_dino = report.get("image_dino_embedding")
+                report["dino_similarity"] = max(
+                    (
+                        score
+                        for score in (
+                            dino_similarity(vector, stored_dino)
+                            for vector in query_dino_embeddings
+                        )
+                        if score is not None
+                    ),
+                    default=None,
+                )
+    scored = image_search(
+        reports, query_hash, query_dhash, query_color_hash, query_alternates
+    )
+    results = [public(r) for r in scored if r["match_score"] >= MIN_IMAGE_MATCH_SCORE]
     return {"query_phash": query_hash, "results": results, "count": len(results), "disclaimer": DISCLAIMER}
 
 

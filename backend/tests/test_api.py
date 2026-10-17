@@ -289,10 +289,9 @@ def test_image_search_ranks_same_item_first(client):
     body = search_image(client, query, "q.jpg").json()
 
     assert body["query_phash"] and len(body["query_phash"]) == 16
-    assert [r["name"] for r in body["results"]] == ["circle", "stripes"]   # no-image report excluded
-    best, other = body["results"]
+    assert [r["name"] for r in body["results"]] == ["circle"]  # weak matches are excluded
+    [best] = body["results"]
     assert best["similarity"] >= 90
-    assert other["similarity"] < 60
     assert best["similarity"] == round(100 - best["hamming_distance"] / 64 * 100, 2)
     assert "manually" in body["disclaimer"]
     assert "image_phash" not in best
@@ -302,6 +301,19 @@ def test_image_search_ranks_same_item_first(client):
 def test_image_search_identical_image_is_100(client):
     create(client, image=to_bytes(gradient()))
     assert search_image(client, to_bytes(gradient())).json()["results"][0]["similarity"] == 100.0
+
+
+@pytest.mark.parametrize("transform", [
+    lambda img: img.transpose(Image.Transpose.FLIP_LEFT_RIGHT),  # mirrored
+    lambda img: img.rotate(90, expand=True),
+    lambda img: img.rotate(180),
+])
+def test_image_search_finds_transformed_copy(client, transform):
+    # Regression: a mirrored/rotated copy of the same photo must still match.
+    create(client, "found", to_bytes(gradient()), name="gradient")
+    body = search_image(client, to_bytes(transform(gradient()))).json()
+    assert [r["name"] for r in body["results"]] == ["gradient"]
+    assert body["results"][0]["match_score"] >= 90
 
 
 def test_image_search_no_images_stored(client):

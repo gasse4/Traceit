@@ -41,6 +41,7 @@ def init_db():
                 image_dhash TEXT,
                 image_color_hash TEXT,
                 image_embedding BLOB,
+                image_dino_embedding BLOB,
                 status TEXT DEFAULT 'active',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -51,6 +52,7 @@ def init_db():
             ("image_dhash", "TEXT"),
             ("image_color_hash", "TEXT"),
             ("image_embedding", "BLOB"),
+            ("image_dino_embedding", "BLOB"),
         ):
             if column not in columns:
                 conn.execute(f"ALTER TABLE reports ADD COLUMN {column} {definition}")
@@ -62,8 +64,8 @@ def add_report(report):
         cur = conn.execute(
             """
             INSERT INTO reports
-            (type, name, description, location, color, image_path, image_phash, image_dhash, image_color_hash, image_embedding)
-            VALUES (:type, :name, :description, :location, :color, :image_path, :image_phash, :image_dhash, :image_color_hash, :image_embedding)
+            (type, name, description, location, color, image_path, image_phash, image_dhash, image_color_hash, image_embedding, image_dino_embedding)
+            VALUES (:type, :name, :description, :location, :color, :image_path, :image_phash, :image_dhash, :image_color_hash, :image_embedding, :image_dino_embedding)
             """,
             report,
         )
