@@ -13,11 +13,18 @@ DB_PATH = os.environ.get(
 @contextmanager
 def get_connection():
     """Open a connection, commit on success, always close."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA synchronous=NORMAL")   # safe with WAL, much faster writes
+    conn.execute("PRAGMA cache_size=-20000")    # ~20 MB page cache
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA mmap_size=67108864")   # 64 MB memory-mapped reads
     try:
         yield conn
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
