@@ -1,23 +1,24 @@
+// Single place that talks to the backend. Point it elsewhere with VITE_API_BASE.
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 
-async function request(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, options);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data?.error || `Request failed (${res.status})`);
+async function request(path, options) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, options);
+  } catch {
+    throw new Error("تعذر الاتصال بالخادم. تأكد من تشغيل الـ backend.");
   }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
 
 export const api = {
-  health: () => request("/health"),
-  reportLost: (formData) =>
-    request("/api/report/lost", { method: "POST", body: formData }),
-  reportFound: (formData) =>
-    request("/api/report/found", { method: "POST", body: formData }),
+  /** type: "lost" | "found"; formData: name, description, location, color, image? */
+  report: (type, formData) => request(`/api/report/${type}`, { method: "POST", body: formData }),
   listReports: () => request("/api/reports"),
+  stats: () => request("/api/stats"),
   searchText: (q) => request(`/api/search/text?q=${encodeURIComponent(q)}`),
-  searchImage: (formData) =>
-    request("/api/search/image", { method: "POST", body: formData }),
+  searchImage: (formData) => request("/api/search/image", { method: "POST", body: formData }),
   imageUrl: (path) => `${API_BASE}/${path}`,
 };

@@ -5,96 +5,99 @@ Two hand-written, academically traceable algorithms:
   2. pHash + Hamming Distance for visual (image) matching.
 """
 
+import math
+
+import numpy as np
 from PIL import Image
-import imagehash
+
+TEXT_FIELDS = ("name", "description", "location", "color")
+
+# pHash works on a 32x32 grayscale image and keeps the 8x8 lowest frequencies -> 64 bits.
+PHASH_IMG_SIZE = 32
+PHASH_HASH_SIZE = 8
+
+# Rows of the DCT-II basis we need: C[k, n] = cos(pi * (2n + 1) * k / (2N)), k < 8.
+# Built once at import; constant scale factors are dropped since they don't change the median test.
+_n = np.arange(PHASH_IMG_SIZE)
+_k = np.arange(PHASH_HASH_SIZE)[:, None]
+DCT_BASIS = np.cos(math.pi * (2 * _n + 1) * _k / (2 * PHASH_IMG_SIZE))
 
 
 def linear_search(reports, search_query):
-    """Return reports where any of name/description/location/color contains query.
+    """Return reports where any text field contains the query (case-insensitive).
 
-    Case-insensitive. Time complexity: O(n).
+    Visits every report exactly once -> time O(n), extra space O(k) for matches.
     """
-    results = []
     query = (search_query or "").strip().lower()
     if not query:
-        return results
+        return []
+
+    results = []
     for report in reports:
-        haystacks = [
-            (report.get("name") or "").lower(),
-            (report.get("description") or "").lower(),
-            (report.get("location") or "").lower(),
-            (report.get("color") or "").lower(),
-        ]
-        if any(query in field for field in haystacks):
-            results.append(report)
+        for field in TEXT_FIELDS:
+            if query in (report.get(field) or "").lower():
+                results.append(report)
+                break  # one matching field is enough; move to the next report
     return results
 
 
-def calculate_phash(image_path):
-    """Compute and return the pHash of an image as a string."""
-    img = Image.open(image_path)
-    # Convert to a representation PIL can load consistently.
-    img = img.convert("RGB")
-    return str(imagehash.phash(img))
+def calculate_phash(img):
+    """Compute the 64-bit perceptual hash (pHash) of a PIL image as 16 hex characters.
+
+    1. Shrink to 32x32 grayscale (drops detail and color, keeps overall structure).
+    2. 2D DCT, keeping only the top-left 8x8 block (the lowest frequencies).
+    3. Each bit = 1 if that coefficient is above the block's median, else 0.
+    """
+    small = img.convert("L").resize((PHASH_IMG_SIZE, PHASH_IMG_SIZE), Image.Resampling.LANCZOS)
+    pixels = np.asarray(small, dtype=np.float64)
+
+    low_freq = DCT_BASIS @ pixels @ DCT_BASIS.T  # 8x8 = DCT along rows, then columns
+    low_freq = low_freq.round(6)  # drop float noise so exact zeros compare as equal
+    bits = (low_freq > np.median(low_freq)).flatten()
+
+    value = 0
+    for bit in bits:
+        value = (value << 1) | int(bit)
+    return f"{value:016x}"
 
 
 def hamming_distance(hash1, hash2):
-    """Number of bit positions that differ between two equal-length hash strings.
+    """Count the bit positions that differ between two equal-length hex hashes.
 
-    Compares character-by-character (imagehash returns a hex string). Each hex
-    character represents 4 bits, so we count differing bits within each pair.
+    Each hex character holds 4 bits: XOR the two characters, then count the 1s.
     """
-    if not hash1 or not hash2:
+    if not hash1 or not hash2 or len(hash1) != len(hash2):
         return None
-    scale = min(len(hash1), len(hash2))
-    # bit-level comparison on the canonical binary forms
-    dist = 0
+
+    distance = 0
     for c1, c2 in zip(hash1, hash2):
-        # convert hex char -> int; xor; count set bits
-        try:
-            b1 = int(c1, 16)
-            b2 = int(c2, 16)
-        except ValueError:
-            dist += 1 if c1 != c2 else 0
-            continue
-        dist += bin(b1 ^ b2).count("1")
-    return dist
+        distance += (int(c1, 16) ^ int(c2, 16)).bit_count()
+    return distance
 
 
-def _hash_bit_length(h):
-    # Each hex char = 4 bits.
-    return len(h) * 4
-
-
-def calculate_similarity(hash1, hash2):
-    """Return similarity % (0-100) derived from Hamming Distance."""
-    d = hamming_distance(hash1, hash2)
-    if d is None:
-        return None
-    length = _hash_bit_length(hash1)
-    if length == 0:
+def calculate_similarity(distance, bit_length):
+    """Convert a Hamming distance into a similarity percentage (0-100)."""
+    if not bit_length:
         return 0.0
-    similarity = 100.0 - (d / length * 100.0)
-    return round(similarity, 2)
+    return round(100.0 - (distance / bit_length * 100.0), 2)
 
 
-def image_search(reports, query_hash, min_results=None):
-    """Sort reports that have a stored pHash by similarity to query_hash.
+def image_search(reports, query_hash):
+    """Score every report that has a stored pHash against query_hash.
 
-    Returns list of dicts with extra keys 'hamming_distance' and 'similarity'.
+    Returns copies of the reports with 'hamming_distance' and 'similarity',
+    sorted from most to least similar.
     """
+    bit_length = len(query_hash) * 4
     scored = []
     for report in reports:
-        stored = report.get("image_phash")
-        if not stored:
+        distance = hamming_distance(query_hash, report.get("image_phash"))
+        if distance is None:
             continue
-        d = hamming_distance(query_hash, stored)
-        if d is None:
-            continue
-        sim = calculate_similarity(query_hash, stored)
-        item = dict(report)
-        item["hamming_distance"] = d
-        item["similarity"] = sim
-        scored.append(item)
+        scored.append({
+            **report,
+            "hamming_distance": distance,
+            "similarity": calculate_similarity(distance, bit_length),
+        })
     scored.sort(key=lambda r: r["hamming_distance"])
     return scored

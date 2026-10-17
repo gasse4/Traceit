@@ -8,8 +8,8 @@ text search (Linear Search) and image comparison (pHash + Hamming Distance).
 
 ## Tech Stack
 - Frontend: React.js (Vite)
-- Backend: Python + Flask
-- Image processing: Pillow + ImageHash
+- Backend: Python + FastAPI (served by Uvicorn)
+- Image processing: Pillow + NumPy (pHash implemented by hand, no ImageHash/SciPy)
 - Database: SQLite
 - Algorithms: Linear Search, pHash + Hamming Distance
 
@@ -30,7 +30,7 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python app.py
 ```
-Backend runs on http://localhost:5000
+Backend runs on http://localhost:5000 — interactive API docs at http://localhost:5000/docs
 
 ### Frontend
 ```bash
@@ -45,8 +45,11 @@ Frontend runs on http://localhost:5173
 TraceIt/
 ├── frontend/
 │   └── src/
-│       ├── App.jsx
-│       └── api.js
+│       ├── App.jsx          # layout + routes
+│       ├── api.js           # all backend calls
+│       ├── index.css        # design tokens (change the theme here)
+│       ├── pages/           # Home, ReportForm, SearchPage
+│       └── components/      # ReportCard, ImagePicker, Feedback, Icons
 └── backend/
     ├── app.py
     ├── algorithms.py
@@ -54,6 +57,29 @@ TraceIt/
     ├── uploads/
     └── requirements.txt
 ```
+
+## Tests
+Both suites use a throwaway database and uploads folder — your real data is never touched.
+
+```bash
+# Backend: algorithms + every API endpoint (pytest)
+cd backend
+pip install -r requirements-dev.txt
+python -m pytest -q
+
+# Frontend: real browser (desktop + mobile) against the real backend (Playwright)
+cd frontend
+npx playwright install chromium   # first time only
+npm run test:e2e
+```
+
+## Configuration
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `5000` | Backend port |
+| `TRACEIT_DB` | `backend/traceit.db` | SQLite file path |
+| `TRACEIT_CORS_ORIGINS` | `*` | Comma-separated allowed origins |
+| `VITE_API_BASE` (frontend) | `http://localhost:5000` | Backend URL used by the UI |
 
 ## Notes
 - pHash depends on lighting and capture angle; observed and explained in the academic write-up.
