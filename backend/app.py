@@ -1,162 +1,187 @@
-"""Flask API entry point for TraceIt."""
+"""FastAPI entry point for TraceIt.
 
+Run:  python app.py            (dev, auto-reload)
+      uvicorn app:app          (any ASGI server)
+Docs: http://localhost:5000/docs
+"""
+
+import io
 import os
 import uuid
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
-from werkzeug.utils import secure_filename
+from contextlib import asynccontextmanager
+from typing import Annotated
 
-from database import init_db, add_report, get_all_active_reports, get_connection
-from algorithms import calculate_phash, linear_search, image_search
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from PIL import Image, ImageOps, UnidentifiedImageError
+
+from algorithms import calculate_phash, image_search, linear_search
+from database import add_report, get_active_reports, get_stats, init_db
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+THUMB_SIZE = (600, 600)  # cards load this small copy, not the original
+ALLOWED_FORMATS = {"JPEG": "jpg", "PNG": "png"}  # Pillow format -> file extension
+CORS_ORIGINS = os.environ.get("TRACEIT_CORS_ORIGINS", "*").split(",")
+DISCLAIMER = "Results are probable only. Verify ownership manually before handover."
 
-
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-def save_image(file_storage):
-    """Save an uploaded image with a safe unique name.
-
-    Returns (relative_path, phash, None) on success or (None, None, error_str).
-    """
-    if not file_storage or not file_storage.filename:
-        return None, None, "no file"
-    if not allowed_file(file_storage.filename):
-        return None, None, "unsupported extension"
-    safe = secure_filename(file_storage.filename)
-    ext = safe.rsplit(".", 1)[1].lower() if "." in safe else "jpg"
-    new_name = f"report_{uuid.uuid4().hex}.{ext}"
-    full_path = os.path.join(UPLOAD_DIR, new_name)
-    file_storage.save(full_path)
-    phash = calculate_phash(full_path)
-    return f"uploads/{new_name}", phash, None
-
-
-app = Flask(__name__)
-CORS(app)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-@app.route("/health", methods=["GET"])
+@asynccontextmanager
+async def lifespan(_app):
+    init_db()
+    yield
+
+
+app = FastAPI(title="TraceIt API", version="1.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+
+# ---------- Errors: always answer with { "error": "..." } ----------
+
+@app.exception_handler(HTTPException)
+async def http_error(_request: Request, exc: HTTPException):
+    return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(_request: Request, exc: RequestValidationError):
+    fields = ", ".join(str(e["loc"][-1]) for e in exc.errors())
+    return JSONResponse({"error": f"invalid or missing field(s): {fields}"}, status_code=400)
+
+
+# ---------- Helpers ----------
+
+def read_image(upload: UploadFile):
+    """Read an upload, check size and real file type.
+
+    Returns (raw bytes, upright PIL image, file extension).
+    """
+    data = upload.file.read(MAX_IMAGE_BYTES + 1)
+    if not data:
+        raise HTTPException(400, "image file is empty")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(413, "image is larger than 10 MB")
+    try:
+        img = Image.open(io.BytesIO(data))
+        fmt = img.format
+        if fmt not in ALLOWED_FORMATS:
+            raise HTTPException(400, "only JPG and PNG images are supported")
+        # Phone photos store rotation in EXIF; apply it so hash and display are upright.
+        img = ImageOps.exif_transpose(img)
+    except (UnidentifiedImageError, OSError):
+        raise HTTPException(400, "file is not a valid image")
+    return data, img, ALLOWED_FORMATS[fmt]
+
+
+def thumb_path_for(image_path):
+    """uploads/found_x.png -> uploads/found_x_thumb.jpg"""
+    return os.path.splitext(image_path)[0] + "_thumb.jpg"
+
+
+def save_thumbnail(img, path):
+    """Save a small JPEG copy; transparent areas become white."""
+    thumb = img.copy()
+    thumb.thumbnail(THUMB_SIZE)
+    if thumb.mode in ("RGBA", "LA", "P"):
+        thumb = thumb.convert("RGBA")
+        background = Image.new("RGB", thumb.size, "white")
+        background.paste(thumb, mask=thumb.getchannel("A"))
+        thumb = background
+    thumb.convert("RGB").save(path, "JPEG", quality=80, optimize=True)
+
+
+def public(report):
+    """Drop internal fields and add the thumbnail URL before sending a report."""
+    out = {k: v for k, v in report.items() if k != "image_phash"}
+    out["thumb_path"] = thumb_path_for(out["image_path"]) if out["image_path"] else None
+    return out
+
+
+# ---------- Routes ----------
+# Routes are plain `def`: FastAPI runs them in a worker thread pool, so blocking
+# SQLite and Pillow work never stalls the event loop.
+
+@app.get("/")
+@app.get("/health")
 def health():
-    return jsonify({"status": "ok"})
+    return {"status": "ok"}
 
 
-@app.route("/api/report/lost", methods=["POST"])
-def report_lost():
-    return create_report("lost")
-
-
-@app.route("/api/report/found", methods=["POST"])
-def report_found():
-    return create_report("found")
-
-
-def create_report(report_type):
-    form = request.form
-    name = (form.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "name is required"}), 400
-
-    image = request.files.get("image")
-    image_path = None
-    image_phash = None
-    if image and image.filename:
-        image_path, image_phash, err = save_image(image)
-        if err:
-            return jsonify({"error": err}), 400
-
-    report = {
-        "type": report_type,
-        "name": name,
-        "description": form.get("description", "") or "",
-        "location": form.get("location", "") or "",
-        "color": form.get("color", "") or "",
-        "image_path": image_path,
-        "image_phash": image_phash,
+def create_report(report_type, name, description, location, color, image):
+    fields = {
+        "name": name.strip(),
+        "description": description.strip(),
+        "location": location.strip(),
+        "color": color.strip(),
     }
-    new_id = add_report(report)
-    return jsonify({"id": new_id, "message": "report created"}), 201
+    missing = [k for k, v in fields.items() if not v]
+    if missing:
+        raise HTTPException(400, f"required field(s): {', '.join(missing)}")
+
+    image_path = image_phash = None
+    if image and image.filename:
+        data, img, ext = read_image(image)
+        image_phash = calculate_phash(img)
+        # Name comes from a UUID, never from the user's filename.
+        image_path = f"uploads/{report_type}_{uuid.uuid4().hex}.{ext}"
+        with open(os.path.join(BASE_DIR, image_path), "wb") as f:
+            f.write(data)
+        save_thumbnail(img, os.path.join(BASE_DIR, thumb_path_for(image_path)))
+
+    new_id = add_report({"type": report_type, **fields, "image_path": image_path, "image_phash": image_phash})
+    return {"id": new_id, "message": "report created"}
 
 
-@app.route("/api/reports", methods=["GET"])
+@app.post("/api/report/{report_type}", status_code=201)
+def report(
+    report_type: str,
+    name: Annotated[str, Form()],
+    description: Annotated[str, Form()] = "",
+    location: Annotated[str, Form()] = "",
+    color: Annotated[str, Form()] = "",
+    image: Annotated[UploadFile | None, File()] = None,
+):
+    """Add a `lost` or `found` report (multipart form, image optional)."""
+    if report_type not in ("lost", "found"):
+        raise HTTPException(404, "report type must be 'lost' or 'found'")
+    return create_report(report_type, name, description, location, color, image)
+
+
+@app.get("/api/reports")
 def list_reports():
-    return jsonify({"results": get_all_active_reports()})
+    results = [public(r) for r in get_active_reports()]
+    return {"results": results, "count": len(results)}
 
 
-@app.route("/api/stats", methods=["GET"])
+@app.get("/api/stats")
 def stats():
-    conn = get_connection()
-    try:
-        total = conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
-        active = conn.execute("SELECT COUNT(*) FROM reports WHERE status = 'active'").fetchone()[0]
-        resolved = conn.execute("SELECT COUNT(*) FROM reports WHERE status = 'resolved'").fetchone()[0]
-        with_image = conn.execute("SELECT COUNT(*) FROM reports WHERE image_path IS NOT NULL").fetchone()[0]
-        # Match percentage: ratio of resolved to total (or 0 if none)
-        match_pct = round((resolved / total * 100) if total else 0)
-    finally:
-        conn.close()
-    return jsonify({
-        "total_reports": total,
-        "active_reports": active,
-        "resolved_reports": resolved,
-        "with_image": with_image,
-        "match_percentage": match_pct,
-    })
+    return get_stats()
 
 
-@app.route("/api/search/text", methods=["GET"])
-def search_text():
-    q = request.args.get("q", "")
-    reports = get_all_active_reports()
-    results = linear_search(reports, q)
-    return jsonify({"query": q, "results": results, "count": len(results)})
+@app.get("/api/search/text")
+def search_text(q: str = ""):
+    results = [public(r) for r in linear_search(get_active_reports(), q)]
+    return {"query": q, "results": results, "count": len(results), "disclaimer": DISCLAIMER}
 
 
-@app.route("/api/search/image", methods=["POST"])
-def search_image():
-    image = request.files.get("image")
-    if not image or not image.filename:
-        return jsonify({"error": "image file is required"}), 400
-    if not allowed_file(image.filename):
-        return jsonify({"error": "unsupported extension"}), 400
+@app.post("/api/search/image")
+def search_image(image: Annotated[UploadFile, File()]):
+    # The query image is hashed in memory and never written to disk.
+    _, img, _ = read_image(image)
+    query_hash = calculate_phash(img)
+    reports = get_active_reports(with_image_only=True)  # rows without a hash can't match
+    results = [public(r) for r in image_search(reports, query_hash)]
+    return {"query_phash": query_hash, "results": results, "count": len(results), "disclaimer": DISCLAIMER}
 
-    safe = secure_filename(image.filename)
-    ext = safe.rsplit(".", 1)[1].lower() if "." in safe else "jpg"
-    temp_name = f"search_{uuid.uuid4().hex}.{ext}"
-    temp_path = os.path.join(UPLOAD_DIR, temp_name)
-    image.save(temp_path)
-    try:
-        query_hash = calculate_phash(temp_path)
-    finally:
-        try:
-            os.remove(temp_path)
-        except OSError:
-            pass
-
-    reports = get_all_active_reports()
-    results = image_search(reports, query_hash)
-    return jsonify(
-        {
-            "query_phash": query_hash,
-            "results": results,
-            "count": len(results),
-            "disclaimer": "Results are probable only. Verify ownership manually before handover.",
-        }
-    )
-
-
-@app.route("/uploads/<path:filename>")
-def uploaded_file(filename):
-    return send_from_directory(UPLOAD_DIR, filename)
-
-
-# initialize schema
-init_db()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    import uvicorn
+
+    uvicorn.run("app:app", host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), reload=True)

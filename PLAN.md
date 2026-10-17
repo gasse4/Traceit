@@ -1,7 +1,7 @@
 # TraceIt – Project Plan (خطة المشروع)
 > Version 1.0  |  Oct 17, 2026
 > Source of truth: TraceIt project.pdf (project plan & technical proposal)
-> Status: PLAN ONLY – no code has been written yet. Consult this plan before every action.
+> Status: MVP implemented (backend on FastAPI since Oct 17, 2026). Consult this plan before every action.
 
 ---
 
@@ -16,7 +16,7 @@ These rules override any ad-hoc decision while working on TraceIt:
 6. **Keep the two academic algorithms implemented by hand and traceable** – `Linear Search` (text) and `pHash + Hamming Distance` (images). Do not replace them with AI/ML or library "magic" search.
 7. **Never claim a match is a certainty.** Always surface the "verification of ownership must be done manually" notice.
 8. **MVP only.** Do not add auth, real-time notifications, cloud storage, native mobile, or CI beyond what § 3.2 excludes.
-9. **Hebrew-free/RTL ready.** UI must follow `DESIGN.md` (Inter + Readex Pro/Cairo Arabic fallback, logical CSS properties, RTL support).
+9. **Arabic-first / RTL ready.** UI must follow `DESIGN.md` (Inter + Readex Pro/Cairo Arabic fallback, logical CSS properties, RTL support).
 10. **Test end-to-end before declaring done.** Follow § 12 test cases.
 
 ---
@@ -78,7 +78,7 @@ These rules override any ad-hoc decision while working on TraceIt:
 - **NFR2:** Runs fully locally (frontend + backend + database) without internet (except for installs).
 - **NFR3:** Clean, responsive UI.
 - **NFR4:** Clear, organized, well-commented code.
-- **NFR5:** Directly runnable via Flask + React.
+- **NFR5:** Directly runnable via FastAPI (Uvicorn) + React.
 
 ---
 
@@ -86,27 +86,27 @@ These rules override any ad-hoc decision while working on TraceIt:
 | Layer | Technology | Notes |
 |---|---|---|
 | Frontend | React.js (Vite recommended) | UI, image upload, results rendering |
-| Backend / API | Python + Flask | REST API, runs algorithms, returns data |
-| Image Processing | Pillow + ImageHash | Read images, compute pHash |
+| Backend / API | Python + FastAPI (Uvicorn ASGI server) | REST API, runs algorithms, returns data; auto docs at `/docs` |
+| Image Processing | Pillow + NumPy | Read images, thumbnails; pHash (DCT) written by hand — no ImageHash/SciPy |
 | Database | SQLite | Store reports, image paths, pHash values |
 | Text Search | Linear Search (manual) | O(n) scan over reports |
 | Image Matching | pHash + Hamming Distance | Lightweight, fast, academic-friendly |
 
 ### 5.1 Dependencies
 Backend (`backend/requirements.txt`):
-- `Flask` (current stable 3.x)
-- `flask-cors`
+- `fastapi` (CORS + static files built in)
+- `uvicorn[standard]` (ASGI server)
+- `python-multipart` (form/file uploads)
 - `Pillow`
-- `ImageHash`
-- `numpy` (only if needed)
+- `numpy` (matrix math for the hand-written pHash DCT)
 
 Frontend:
 - Vite + React
 - `react-router-dom`
-- `axios` (or native `fetch`)
+- native `fetch` (no HTTP client library)
 - Tailwind CSS (recommended, aligned with `DESIGN.md` tokens) — or plain CSS with the tokens
 
-> Always use current, non-deprecated APIs. Flask 3.x patterns, React 18+ function components + hooks, Vite 5+.
+> Always use current, non-deprecated APIs. FastAPI + Pydantic v2 patterns, React 19 function components + hooks, Vite 8+, Tailwind CSS 4 (`@theme` tokens in `src/index.css`).
 
 ---
 
@@ -167,7 +167,7 @@ def linear_search(reports, search_query):
 **Goal:** find visually closest registered images.
 
 Steps:
-1. On **report creation** with image: open via Pillow, compute `imagehash.phash(image)`, store as `str` in `image_phash`.
+1. On **report creation** with image: open via Pillow (EXIF-rotated upright), compute pHash by hand — 32×32 grayscale → DCT → top-left 8×8 → bit = above median — and store as 16 hex chars in `image_phash`. Output is bit-identical to `imagehash.phash`. Also save a ≤600px JPEG thumbnail (`<name>_thumb.jpg`) for result cards.
 2. On **image search**: receive image, compute its pHash.
 3. Compare query pHash against every stored (non-null) report pHash using `Hamming Distance` (number of differing bits).
 4. `similarity = 100 - (distance / hash_length * 100)` — pHash length is 64 bits.
@@ -197,11 +197,14 @@ Important notes:
 TraceIt/
 ├── frontend/
 │   └── src/
-│       ├── App.jsx              # UI, forms, search, results
-│       └── api.js               # Backend communication
+│       ├── App.jsx              # Layout, navigation, routes
+│       ├── api.js               # Backend communication (only file that calls the API)
+│       ├── index.css            # Design tokens (colors, fonts, shadows)
+│       ├── pages/               # Home, ReportForm (lost/found), SearchPage (text/image tabs)
+│       └── components/          # ReportCard, ImagePicker, Feedback (Disclaimer/Alert/...), Icons
 │
 └── backend/
-    ├── app.py                   # Flask API entry point
+    ├── app.py                   # FastAPI entry point
     ├── algorithms.py            # Linear Search + Hamming Distance
     ├── database.py              # CRUD over SQLite
     ├── uploads/                 # Local storage for report images
@@ -213,15 +216,15 @@ TraceIt/
 |---|---|---|
 | `app.py` | API entry point | Routes, request handling, orchestrate algorithms + db, return JSON |
 | `algorithms.py` | Algorithm logic | `linear_search()`, `calculate_phash()`, `hamming_distance()`, `calculate_similarity()` |
-| `database.py` | DB layer | Create tables, add report, get all active reports, get by id |
+| `database.py` | DB layer | Create tables, add report, get all active reports, stats |
 | `uploads/` | Image folder | Store report images, temp search images |
-| `requirements.txt` | Dependencies | Flask, flask-cors, Pillow, ImageHash |
+| `requirements.txt` | Dependencies | FastAPI, Uvicorn, python-multipart, Pillow, NumPy |
 
 ### 8.2 Frontend files' responsibilities
 | File | Purpose | Key duties |
 |---|---|---|
-| `App.jsx` + screens | UI | Home, ReportLost, ReportFound, Search (text/image tabs), Results |
-| `api.js` | API layer | `submitLost()`, `submitFound()`, `searchText()`, `searchImage()` via axios/fetch |
+| `App.jsx` + `pages/` + `components/` | UI | Home, ReportLost, ReportFound, Search (text/image tabs) with result cards |
+| `api.js` | API layer | `report(type)`, `listReports()`, `stats()`, `searchText()`, `searchImage()` via `fetch` |
 
 > Structure must match the PDF exactly. Extra helper modules are allowed only when clearly justified by the plan.
 
@@ -249,7 +252,7 @@ UI guidelines (from `DESIGN.md`):
 ---
 
 ## 10. API Design
-Base URL: `http://localhost:5000` (Flask dev, `FLASK_RUN_PORT` adjustable).
+Base URL: `http://localhost:5000` (Uvicorn, `PORT` env adjustable; interactive docs at `/docs`).
 
 | Method | Endpoint | Description | Body/Params |
 |---|---|---|---|
@@ -257,6 +260,7 @@ Base URL: `http://localhost:5000` (Flask dev, `FLASK_RUN_PORT` adjustable).
 | POST | `/api/report/lost` | Add a lost report | form-data: name, description, location, color, image(optional) |
 | POST | `/api/report/found` | Add a found report | same |
 | GET | `/api/reports` | List active reports (diagnostic/view) | — |
+| GET | `/api/stats` | Active report counts (total/lost/found/with image) for Home | — |
 | GET | `/api/search/text` | Text search | `?q=...` |
 | POST | `/api/search/image` | Image search | form-data: image |
 
@@ -289,32 +293,32 @@ Conventions: CORS enabled for the Vite dev origin; consistent JSON error shape `
 
 ## 11. Implementation Plan (step-by-step, with checkboxes)
 ### Phase 1 — Setup & Structure (Day 1)
-- [ ] Create `/home/gasser/Documents/Traceit` tree per § 8: `frontend/`, `backend/`, `backend/uploads/`.
-- [ ] Create `backend/requirements.txt` (Flask 3.x, Flask-Cors, Pillow, ImageHash).
-- [ ] Set up Python venv in `backend/.venv`.
-- [ ] Init React project in `frontend/` via Vite (react template).
+- [x] Create `TraceIt` tree per § 8: `frontend/`, `backend/`, `backend/uploads/`.
+- [x] Create `backend/requirements.txt` (FastAPI, Uvicorn, python-multipart, Pillow, NumPy).
+- [x] Set up Python venv in `backend/.venv`.
+- [x] Init React project in `frontend/` via Vite (react template).
 
 ### Phase 2 — Database + Algorithms (Day 1–2)
-- [ ] `database.py`: `init_db()`, `add_report()`, `get_all_active_reports()`, `get_report_by_id()` (optional but useful).
-- [ ] `algorithms.py`: `linear_search()`, `calculate_phash()`, `hamming_distance()`, `calculate_similarity()`.
-- [ ] Smoke test: compute pHash on a sample image; compute Hamming distance between two images.
+- [x] `database.py`: `init_db()`, `add_report()`, `get_all_active_reports()`, `get_stats()`.
+- [x] `algorithms.py`: `linear_search()`, `calculate_phash()`, `hamming_distance()`, `calculate_similarity()`, `image_search()`.
+- [x] Smoke test: compute pHash on a sample image; compute Hamming distance between two images.
 
 ### Phase 3 — Backend API (Day 2)
-- [ ] `app.py`: Flask + CORS, auto-create `uploads/`, routes for report lost/found, search text/image, list reports.
-- [ ] Test endpoints with curl or Postman.
-- [ ] Image handling: validate ext (jpg/jpeg/png), store with a unique (uuid/timestamp) name.
+- [x] `app.py`: FastAPI + CORS, auto-create `uploads/`, routes for report lost/found, search text/image, list reports.
+- [x] Test endpoints with curl or Postman.
+- [x] Image handling: validate real format with Pillow (JPEG/PNG, ≤ 10 MB), store with a unique (uuid/timestamp) name.
 
 ### Phase 4 — Frontend UI (Day 2–3)
-- [ ] `api.js`: configure base URL and functions.
-- [ ] `App.jsx`: router + pages; Navbar.
-- [ ] Build Home, ReportLost, ReportFound, Search tabs, results screens.
-- [ ] Connect forms to API; render disclaimer.
+- [x] `api.js`: configure base URL and functions.
+- [x] `App.jsx`: router + pages; Navbar.
+- [x] Build Home, ReportLost, ReportFound, Search tabs, results screens.
+- [x] Connect forms to API; render disclaimer.
 
 ### Phase 5 — Testing & Cleanup (Day 3)
-- [ ] End-to-end scenario tests (§ 12).
-- [ ] Verify image storage & pHash computation.
-- [ ] Remove console.log, unused imports; comment clearly.
-- [ ] Double-check algorithm transparency (linear scan; bit comparison loop, not a black-box).
+- [x] End-to-end scenario tests (§ 12).
+- [x] Verify image storage & pHash computation.
+- [x] Remove console.log, unused imports; comment clearly.
+- [x] Double-check algorithm transparency (linear scan; bit comparison loop, not a black-box).
 
 ### Phase 6 — Final Packaging (Day 3–4)
 - [ ] Write `README.md` (Arabic) with idea, tech, algorithms short explainer, run steps, structure, screenshots.
@@ -355,12 +359,12 @@ Conventions: CORS enabled for the Vite dev origin; consistent JSON error shape `
 ## 14. Risks & Mitigations
 | Risk | Impact | Prob | Mitigation |
 |---|---|---|---|
-| Large image uploads | Medium | Medium | Use non-resized originals for MVP; Pillow handles gracefully |
+| Large image uploads | Medium | Medium | 10 MB cap; originals kept, cards load a ≤600px thumbnail |
 | Unsupported extension | Low | Low | Validate allowed ext: `.jpg`, `.jpeg`, `.png` |
 | pHash mismatch due to angle/lighting | Medium | Medium | Expected; discuss in academic write-up as observation |
-| Wrong image path URL | Low | Low | Build relative URL consistently; serve `uploads/` via Flask `send_from_directory` |
+| Wrong image path URL | Low | Low | Build relative URL consistently; serve `uploads/` via FastAPI `StaticFiles` |
 | File name collisions | Low | Low | Use UUID/timestamp in stored filename |
-| Deprecated APIs | Low | Low | Verify versions; avoid Flask 2-only patterns |
+| Deprecated APIs | Low | Low | Verify versions; pin versions in `requirements.txt` |
 
 ---
 
