@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "traceit-api"
+version = "1.0.0"
+description = "TraceIt lost-and-found image search API"
+requires-python = ">=3.12,<3.15"
+
+[tool.setuptools]
+py-modules = ["algorithms", "app", "database", "embeddings"]
