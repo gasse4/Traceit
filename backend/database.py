@@ -38,11 +38,22 @@ def init_db():
                 color TEXT,
                 image_path TEXT,
                 image_phash TEXT,
+                image_dhash TEXT,
+                image_color_hash TEXT,
+                image_embedding BLOB,
                 status TEXT DEFAULT 'active',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(reports)")}
+        for column, definition in (
+            ("image_dhash", "TEXT"),
+            ("image_color_hash", "TEXT"),
+            ("image_embedding", "BLOB"),
+        ):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE reports ADD COLUMN {column} {definition}")
 
 
 def add_report(report):
@@ -51,8 +62,8 @@ def add_report(report):
         cur = conn.execute(
             """
             INSERT INTO reports
-            (type, name, description, location, color, image_path, image_phash)
-            VALUES (:type, :name, :description, :location, :color, :image_path, :image_phash)
+            (type, name, description, location, color, image_path, image_phash, image_dhash, image_color_hash, image_embedding)
+            VALUES (:type, :name, :description, :location, :color, :image_path, :image_phash, :image_dhash, :image_color_hash, :image_embedding)
             """,
             report,
         )

@@ -248,6 +248,7 @@ def test_text_search(client):
         return [r["id"] for r in client.get("/api/search/text", params={"q": q}).json()["results"]]
 
     assert ids("سماعة أذن") == [1]   # exact
+    assert ids("سماعه") == [1]       # common Arabic spelling variant
     assert ids("مكتب") == [1]        # partial
     assert ids("KEYS") == [2]        # case-insensitive
     assert ids("e") == [2]           # 'e' only in English report

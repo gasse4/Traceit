@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw
 # Point the app at a throwaway uploads folder *before* it is imported.
 UPLOADS = tempfile.mkdtemp(prefix="traceit-uploads-")
 os.environ["TRACEIT_UPLOADS"] = UPLOADS
+os.environ["TRACEIT_CLIP_ENABLED"] = "0"
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import database  # noqa: E402

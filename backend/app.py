@@ -1,7 +1,7 @@
 """FastAPI entry point for TraceIt.
 
-Run:  python app.py            (dev, auto-reload)
-      uvicorn app:app          (any ASGI server)
+Run:  uvicorn app:app --reload --port 5000
+      python app.py            (same development server)
 Docs: http://localhost:5000/docs
 """
 
@@ -19,7 +19,15 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from algorithms import calculate_phash, image_search, linear_search
+from embeddings import calculate_clip_embedding, clip_similarity
+from algorithms import (
+    calculate_color_hash,
+    calculate_dhash,
+    calculate_orb_similarity,
+    calculate_phash,
+    image_search,
+    linear_search,
+)
 from database import add_report, get_active_reports, get_stats, init_db
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -105,7 +113,7 @@ def save_thumbnail(img, path):
 
 def public(report):
     """Drop internal fields and add the thumbnail URL before sending a report."""
-    out = {k: v for k, v in report.items() if k != "image_phash"}
+    out = {k: v for k, v in report.items() if not k.startswith("image_") or k in ("image_path",)}
     out["thumb_path"] = thumb_path_for(out["image_path"]) if out["image_path"] else None
     return out
 
@@ -131,10 +139,13 @@ def create_report(report_type, name, description, location, color, image):
     if missing:
         raise HTTPException(400, f"required field(s): {', '.join(missing)}")
 
-    image_path = image_phash = None
+    image_path = image_phash = image_dhash = image_color_hash = image_embedding = None
     if image and image.filename:
         data, img, ext = read_image(image)
         image_phash = calculate_phash(img)
+        image_dhash = calculate_dhash(img)
+        image_color_hash = calculate_color_hash(img)
+        image_embedding = calculate_clip_embedding(img)
         # Name comes from a UUID, never from the user's filename.
         file_name = f"{report_type}_{uuid.uuid4().hex}.{ext}"
         with open(os.path.join(UPLOAD_DIR, file_name), "wb") as f:
@@ -142,7 +153,11 @@ def create_report(report_type, name, description, location, color, image):
         save_thumbnail(img, os.path.join(UPLOAD_DIR, thumb_path_for(file_name)))
         image_path = f"uploads/{file_name}"  # URL path, served by the /uploads mount
 
-    new_id = add_report({"type": report_type, **fields, "image_path": image_path, "image_phash": image_phash})
+    new_id = add_report({
+        "type": report_type, **fields, "image_path": image_path,
+        "image_phash": image_phash, "image_dhash": image_dhash,
+        "image_color_hash": image_color_hash, "image_embedding": image_embedding,
+    })
     return {"id": new_id, "message": "report created"}
 
 
@@ -183,8 +198,25 @@ def search_image(image: Annotated[UploadFile, File()]):
     # The query image is hashed in memory and never written to disk.
     _, img, _ = read_image(image)
     query_hash = calculate_phash(img)
+    query_dhash = calculate_dhash(img)
+    query_color_hash = calculate_color_hash(img)
+    query_embedding = calculate_clip_embedding(img)
     reports = get_active_reports(with_image_only=True)  # rows without a hash can't match
-    results = [public(r) for r in image_search(reports, query_hash)]
+    for report in reports:
+        if not report.get("image_path"):
+            continue
+        stored_path = os.path.join(UPLOAD_DIR, os.path.basename(report["image_path"]))
+        if os.path.isfile(stored_path):
+            with Image.open(stored_path) as stored_image:
+                if not report.get("image_dhash"):
+                    report["image_dhash"] = calculate_dhash(stored_image)
+                if not report.get("image_color_hash"):
+                    report["image_color_hash"] = calculate_color_hash(stored_image)
+                report["orb_similarity"] = calculate_orb_similarity(img, stored_image)
+                if not report.get("image_embedding"):
+                    report["image_embedding"] = calculate_clip_embedding(stored_image)
+                report["clip_similarity"] = clip_similarity(query_embedding, report.get("image_embedding"))
+    results = [public(r) for r in image_search(reports, query_hash, query_dhash, query_color_hash)]
     return {"query_phash": query_hash, "results": results, "count": len(results), "disclaimer": DISCLAIMER}
 
 

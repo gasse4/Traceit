@@ -5,7 +5,7 @@ import io
 import pytest
 from PIL import Image
 
-from algorithms import calculate_phash, calculate_similarity, hamming_distance, image_search, linear_search
+from algorithms import calculate_match_score, calculate_phash, calculate_similarity, hamming_distance, image_search, linear_search
 from conftest import circle, gradient, stripes, to_bytes
 
 
@@ -29,6 +29,8 @@ class TestLinearSearch:
 
     @pytest.mark.parametrize("q, ids", [
         ("سماعة", [1]),            # name (Arabic)
+        ("سماعه", [1]),            # common taa marbuta spelling
+        ("  سَمَاعَه  ", [1]),     # diacritics and whitespace
         ("بيضاء", [1]),            # description
         ("مكتبة", [1]),            # location
         ("أبيض", [1]),             # color
@@ -132,6 +134,12 @@ class TestHamming:
 
     def test_similarity_zero_length(self):
         assert calculate_similarity(0, 0) == 0.0
+
+    def test_match_score_is_conservative_for_different_images(self):
+        assert calculate_match_score(32, 32, 8) < 10
+
+    def test_match_score_is_perfect_for_identical_images(self):
+        assert calculate_match_score(0, 0, 0) == 100.0
 
 
 class TestImageSearch:

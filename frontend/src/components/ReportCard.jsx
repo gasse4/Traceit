@@ -19,7 +19,8 @@ function formatDate(value) {
 export default function ReportCard({ item }) {
   const isFound = item.type === "found";
   const scored = item.similarity != null;
-  const level = scored ? matchLevel(item.similarity) : null;
+  const score = item.match_score ?? item.visual_similarity ?? item.similarity;
+  const level = scored ? matchLevel(score) : null;
 
   return (
     <article
@@ -38,7 +39,7 @@ export default function ReportCard({ item }) {
         </span>
         {scored && (
           <span className={`tnum rounded-full border px-2.5 py-1 text-xs font-bold ${level.badge}`}>
-            تطابق {item.similarity}%
+            تطابق {score}%
           </span>
         )}
       </div>
@@ -83,7 +84,7 @@ export default function ReportCard({ item }) {
             <span className="tnum font-mono">{item.hamming_distance} / 64</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden bg-slate-200">
-            <div className={`h-full ${level.bar}`} style={{ width: `${item.similarity}%` }} />
+            <div className={`h-full ${level.bar}`} style={{ width: `${score}%` }} />
           </div>
         </div>
       )}
