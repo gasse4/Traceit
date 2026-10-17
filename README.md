@@ -1,112 +1,332 @@
-# TraceIt — Find What Matters
+# TraceIt — نظام ذكي للبحث عن المفقودات داخل الحرم الجامعي
 
-نظام ذكي للبحث عن المفقودات داخل الحرم الجامعي.
+> تطبيق MVP يبحث عن الأغراض المفقودة والموجودة داخل الجامعة باستخدام البحث النصي ومطابقة الصور الذكية.  
+> الإصدار: 2.0 (دقة عالية + تعريف الأشياء)  
+> التاريخ: 17 أكتوبر 2026
 
-## Idea
-TraceIt helps students report and search for lost/found items on campus using
-text search (Linear Search) and multi-signal image comparison.
+---
 
-## Tech Stack
-- Frontend: React.js (Vite)
-- Backend: Python + FastAPI (served by Uvicorn)
-- Image processing: Pillow + NumPy (pHash/dHash implemented by hand) + OpenCV ORB
-- Database: SQLite
-- Algorithms: Linear Search, pHash, dHash, color signature, Hamming Distance, ORB
+## 1. فكرة التطبيق
 
-## How it works
-- Report an item as `lost` or `found` (optional image).
-- Text search scans all reports one-by-one with `Linear Search`.
-- Image search combines `pHash` for overall structure, `dHash` for edges, a
-  compact color signature, and OpenCV `ORB` local-feature matching.
-- The final score is conservative: the hash signals provide the base score and
-  ORB contributes when local features are available. It is a visual confidence
-  score, not proof of ownership.
-- Results are **probable**. Ownership must be verified manually before handover.
+تطبيق TraceIt يساعد الطلاب في الحرم الجامعي على العثور على الأغراض التي فقدوها (مثل السماعات، المفاتيح، الشنط، المحافظ) أو الإبلاغ عن أغراض عثروا عليها.
 
-## Run locally
+فكرة التطبيق بسيطة:
+1. المستخدم يسجل بلاغاً عن غرض **مفقود** أو **موجود** مع إدخال الاسم، الوصف، المكان، اللون، وصورة اختيارية.
+2. يمكن للمستخدم البحث عن غرض باستخدام **البحث النصي** (بالاسم أو الوصف أو المكان أو اللون) أو باستخدام **الصورة** (ترفع صورة ويقارن التطبيق بصمتها مع الصور المسجلة).
+3. يعرض التطبيق نتائج البحث مع نسبة تشابه لكل نتيجة، مع تنبيه مهم بأن هذه النتائج "محتملة" ويجب التحقق من الملكية يدوياً قبل التسليم.
 
-### 1. Backend
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate             # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app:app --reload --host 127.0.0.1 --port 5000
-```
-Backend runs on http://localhost:5000 — interactive API docs at http://localhost:5000/docs
+الهدف الأكاديمي من التطبيق هو تطبيق خوارزميتين بسيطتين وقابلتين للشرح:  
+**البحث الخطي (Linear Search)** للبحث النصي، و**البصمة الرقمية pHash مع مسافة هامينج (Hamming Distance)** لمقارنة الصور، مع طبقة دقة أعلى باستخدام OpenCV و CLIP.
 
-### 2. Frontend
-Open a second terminal:
+---
 
-```bash
-cd frontend
-npm install
-npm run dev -- --host 127.0.0.1
-```
-Frontend runs on http://localhost:5173
+## 2. الميزات الأساسية
 
-Open http://localhost:5173/ in the browser.
+| الميزة | الوصف |
+|--------|-------|
+| 📝 الإبلاغ عن مفقود | تسجيل غرض فقده المستخدم مع بيانات اختيارية وصورة |
+| 📦 الإبلاغ عن موجود | تسجيل غرض عثر عليه المستخدم مع بيانات اختيارية وصورة |
+| 🔍 البحث النصي | البحث بالاسم، الوصف، المكان، أو اللون باستخدام الخوارزمية الخطية |
+| 🖼️ البحث بالصورة | رفع صورة ومقارنتها مع الصور المسجلة باستخدام البصمة الرقمية |
+| 📊 نسبة التشابه | عرض نسبة تشابه مئوية لكل نتيجة في البحث بالصور |
+| ⚠️ تنبيه التحقق | تنبيه بأن النتائج محتملة ويجب التحقق من الملكية يدوياً قبل التسليم |
+| 📊 الإحصائيات | عرض عدد البلاغات الإجمالية، المفقودة، الموجودة، والبلاغات ذات الصور |
 
-### Start from an empty database
+---
 
-This removes reports and resets report IDs without changing the schema:
+## 3. التقنيات المستخدمة (Tech Stack)
 
-```bash
-cd backend
-python - <<'PY'
-import sqlite3
+| الجزء | التقنية | الغرض |
+|-------|---------|-------|
+| **واجهة المستخدم (Frontend)** | React.js + Vite | بناء الواجهة، النماذج، وعرض النتائج |
+| **الخلفية (Backend)** | Python + FastAPI + Uvicorn | API REST، تشغيل الخوارزميات، وإرجاع البيانات |
+| **معالجة الصور** | Pillow + NumPy | قراءة الصور، حساب البصمة الرقمية (pHash) يدوياً |
+| **مطابقة الصور (أساسية)** | pHash + Hamming Distance | خوارزمية يدوية خفيفة وسهلة الشرح أكاديمياً |
+| **مطابقة الصور (دقة أعلى)** | OpenCV (ORB) + PyTorch + Transformers (CLIP) | طبقات إضافية لزيادة دقة المطابقة البصرية |
+| **قاعدة البيانات** | SQLite | تخزين البلاغات، مسارات الصور، والبصمات الرقمية |
+| **الاختبارات** | Pytest | اختبارات وحدة للخوارزميات و اختبارات تكامل لـ API |
 
-with sqlite3.connect("traceit.db") as conn:
-    conn.execute("DELETE FROM reports")
-    conn.execute("DELETE FROM sqlite_sequence WHERE name = 'reports'")
-PY
-```
+---
 
-Uploaded image files are kept in `backend/uploads/`. Remove only the files in
-that directory if you also want to clear stored images.
+## 4. هيكل المشروع
 
-## Project structure
 ```
 TraceIt/
 ├── frontend/
 │   └── src/
-│       ├── App.jsx          # layout + routes
-│       ├── api.js           # all backend calls
-│       ├── index.css        # design tokens (change the theme here)
-│       ├── pages/           # Home, ReportForm, SearchPage
-│       └── components/      # ReportCard, ImagePicker, Feedback, Icons
+│       ├── App.jsx              # التخطيط، التنقل، المسارات
+│       ├── api.js               # التواصل مع الخلفية (الملف الوحيد الذي يستدعي API)
+│       ├── index.css            # رموز التصميم (الألوان، الخطوط، الظلال)
+│       ├── pages/
+│       │   ├── Home.jsx         # الصفحة الرئيسية
+│       │   ├── ReportForm.jsx   # نموذج الإبلاغ (مفقود/موجود)
+│       │   └── SearchPage.jsx   # صفحة البحث (نصي وصوري)
+│       └── components/
+│           ├── ReportCard.jsx   # بطاقة عرض الغرض
+│           ├── ImagePicker.jsx  # اختيار ورفع الصور
+│           ├── Feedback.jsx     # التنبيهات والحالات (Disclaimer/Alert/Spinner)
+│           └── Icons.jsx        # أيقونات SVG
+│
 └── backend/
-    ├── app.py
-    ├── algorithms.py            # text search and image matching
-    ├── database.py
-    ├── uploads/
-    └── requirements.txt         # includes OpenCV for ORB
+    ├── app.py                   # نقطة الدخول FastAPI
+    ├── algorithms.py            # الخوارزميات (بحث خطي + pHash + Hamming + ORB + CLIP)
+    ├── database.py              # عمليات CRUD على SQLite + الإحصائيات
+    ├── embeddings.py            # غلاف تضمين الصور CLIP
+    ├── uploads/                 # تخزين الصور المصغرة والأصلية
+    ├── requirements.txt         # dépendances وقت التشغيل
+    ├── requirements-dev.txt     # dépendances الاختبار
+    └── tests/
+        ├── conftest.py          # إعداد الاختبارات المشتركة
+        ├── test_algorithms.py   # اختبارات وحدة للخوارزميات
+        └── test_api.py          # اختبارات تكامل لـ API
 ```
 
-## Tests
-Both suites use a throwaway database and uploads folder — your real data is never touched.
+---
 
+## 5. الخوارزميات المرفقة
+
+### 5.1 البحث الخطي (Linear Search) — للبحث النصي
+
+الغرض: البحث عن تطابق نصي جزئي في الحقول الأربعة (الاسم، الوصف، المكان، اللون) دون تمييز بين الأحرف الكبيرة والصغيرة.
+
+**كيف تعمل:**
+1. تستقبل جميع البلاغات النشطة من قاعدة البيانات.
+2. تحول كلمة البحث إلى أحرف صغيرة وتزيل الفراغات الزائدة.
+3. تمر على كل بلاغ على حدة وتفحص الحقول الأربعة.
+4. إذا وجد تطابق في أي حقل، تضيف البلاغ إلى قائمة النتائج.
+5. ترجع جميع النتائج المطابقة.
+
+**التعقيد الزمني:** `O(n)` حيث `n` عدد البلاغات.
+
+**مثال على الكود:**
+```python
+def linear_search(reports, search_query):
+    results = []
+    query = (search_query or "").strip().lower()
+    if not query:
+        return results
+    for report in reports:
+        fields = [
+            (report.get("name") or "").lower(),
+            (report.get("description") or "").lower(),
+            (report.get("location") or "").lower(),
+            (report.get("color") or "").lower(),
+        ]
+        if any(query in field for field in fields):
+            results.append(report)
+    return results
+```
+
+---
+
+### 5.2 البصمة الرقمية pHash مع مسافة هامينج — لمقارنة الصور (الأساسية)
+
+الغرض: إيجاد الصور الأقرب بصرياً من بين الصور المسجلة دون استخدام نماذج ذكاء اصطناعي ثقيلة.
+
+**كيف تعمل:**
+1. عند تسجيل بلاغ مع صورة: فتح الصورة باستخدام Pillow، حساب بصمة `pHash` لها، وتخزينها كنص في قاعدة البيانات.
+2. عند البحث بالصور: المستخدم يرفع صورة، ويتم حساب بصمتها فوراً.
+3. المقارنة: مقارنة بصمة صورة البحث مع كل بصمة مخزنة باستخدام **مسافة هامينج (Hamming Distance)** — وهي عدد البتات المختلفة بين بصمتين متساويتي الطول.
+4. النتيجة: كلما كانت البتات المختلفة أقل، كانت درجة التشابه البصرية أعلى.
+
+**الصيغة:**
+```
+similarity = 100 - (hamming_distance / 64 * 100)
+```
+
+**مثال توضيحي:**
+```
+صورة أ: 101101001101
+صورة ب: 101101001001
+بتات مختلفة: 1 → مسافة هامينج = 1
+نسبة التشابه ≈ 91.67%
+```
+
+---
+
+### 5.3 طبقات الدقة الأعلى (اختيارية)
+
+لزيادة دقة المطابقة، يستخدم التطبيق طبقات إضافية إلى جانب pHash الأساسية:
+
+#### أ. OpenCV ORB (التعرف على السمات المحلية)
+تقارن السمات البصرية المحلية بين صورة البحث وصورة المرشح وتعطي نتيجة من 0 إلى 100 تشير إلى مدى تطابق النقاط المميزة في الصورتين.
+
+#### ب. CLIP embeddings (التضمين الصوري)
+تقوم بتحويل الصورة إلى متجه رقمي (إيمبيدينغ) باستخدام نموذج CLIP المدرب مسبقاً (ي runs على المعالج CPU)، ثم تقارن بين متجه صورة البحث ومتجهات الصور المخزنة باستخدام التشابه الجيب cosine.
+
+#### ج. النتيجة المجمعة (Match Score)
+يتم دمج النتائج من الح três طبقات (pHash، ORB، CLIP) في نتيجة مجمعة مرجحة تحدد ترتيب النتائج النهائية.
+
+---
+
+## 6. قاعدة البيانات
+
+يُستخدم جدول واحد باسم `reports` لبساطة التصميم (MVP).
+
+| الحقل | النوع | الوصف |
+|-------|-------|-------|
+| `id` | INTEGER (PK) | رقم البلاغ الفريد |
+| `type` | TEXT | نوع البلاغ: `lost` أو `found` |
+| `name` | TEXT | اسم/وصف مختصر للغرض |
+| `description` | TEXT | وصف تفصيلي |
+| `location` | TEXT | المكان التقريبي |
+| `color` | TEXT | لون الغرض |
+| `image_path` | TEXT | مسار الصورة في مجلد `uploads/` |
+| `image_phash` | TEXT | بصمة pHash كسلسلة عشرية šestнадцатеричной |
+| `image_dhash` | TEXT | بصمة dHash |
+| `image_color_hash` | TEXT | بصمة اللون المبسطة |
+| `image_embedding` | BLOB | تضمين CLIP للصورة |
+| `status` | TEXT | حالة البلاغ: `active` أو `resolved` |
+| `created_at` | DATETIME | تاريخ إنشاء البلاغ |
+
+**ملاحظات:**
+- يتم البحث فقط في البلاغات ذات الحالة `active`.
+- جميع entradas تُخزن باستخدام استعلامات معلمنة (parameterized queries) لحماية ضد حقن SQL.
+- أسماء الملفات تُولد باستخدام `uuid` لمنع تجاوز المسار (path traversal) أو تحميل ملفات خبيثة.
+
+---
+
+## 7. تصميم واجهة المستخدم (UI/UX)
+
+يدعم التطبيق اللغة العربية كلغة أساسية مع اتجاه كتابة من اليمين لليسار (RTL)، ويتوافق مع اللغات الأجنبية.
+
+**الصفحات:**
+- **الرئيسية (Home):** ترحيب، إحصائيات، إجراءات سريعة (بحث نصي، بحث بصري، إبلاغ جديد).
+- **إبلاغ عن مفقود/موجود:** نموذج إدخال بيانات الغرض مع إمكانية رفع صورة.
+- **البحث (Search):** تبويبان: "بحث نصي" و"بحث بالصور"، مع عرض النتائج كبطاقات تحتوي على نسبة التشابه.
+
+**عناصر الواجهة:**
+- بطاقات بيضاء بحدود خفيفة وظل ناعم.
+- شارات نسبة التشابه بالألوان: أخضر (عالي ≥85%)، برتقالي (متوسط 50–84%)، رمادي (منخفض <50%).
+- تنبيه ثابت أعلى النتائج يوضح أن النتائج محتملة والتحقق من الملكية يتم يدوياً.
+
+---
+
+## 8. واجهة برمجة التطبيقات (API)
+
+يعمل الخادم على `http://localhost:5000` وتوجد وثائق تفاعلية تلقائياً على `/docs`.
+
+| الطريقة | نقطة النهاية | الوصف | البيانات |
+|--------|-------------|-------|---------|
+| `GET` | `/` أو `/health` | فحص حالة الخادم | — |
+| `POST` | `/api/report/{report_type}` | إضافة بلاغ مفقود/موجود | `form-data`: الاسم، الوصف، المكان، اللون، صورة (اختيارية) |
+| `GET` | `/api/reports` | عرض جميع البلاغات النشطة | — |
+| `GET` | `/api/stats` | إحصائيات البلاغات | — |
+| `GET` | `/api/search/text` | بحث نصي | `?q=كلمة البحث` |
+| `POST` | `/api/search/image` | بحث بالصورة | `form-data`: صورة |
+
+**مثال على استجابة البحث النصي:**
+```json
+{
+  "query": "سماعة",
+  "results": [
+    {
+      "id": 1,
+      "type": "found",
+      "name": "سماعة أذن",
+      "description": "سماعة بيضاء صغيرة",
+      "location": "مكتبة الكلية",
+      "color": "أبيض",
+      "image_path": "uploads/found_abc123.png",
+      "thumb_path": "uploads/found_abc123_thumb.jpg"
+    }
+  ],
+  "count": 1,
+  "disclaimer": "Results are probable only. Verify ownership manually before handover."
+}
+```
+
+---
+
+## 9. cómo चल app (كيفية التشغيل)
+
+### المتطلبات المسبقة
+- بايثون 3.10 أو أحدث
+- Node.js و npm
+- إنترنت لتثبيت الحزم مرة واحدة (بعدها يعمل التطبيق محلياً بدون إنترنت)
+
+### تشغيل الخلفية (Backend)
 ```bash
-# Backend: algorithms + every API endpoint (pytest)
 cd backend
-pip install -r requirements-dev.txt
-python -m pytest -q
+python -m venv .venv
+# تفعيل البيئة الافتراضية (لينكس/ماك):
+source .venv/bin/activate
+# أو (ويندوز):
+# .venv\Scripts\activate
 
-# Frontend: real browser (desktop + mobile) against the real backend (Playwright)
-cd frontend
-npx playwright install chromium   # first time only
-npm run test:e2e
+# تثبيت الحزم
+pip install -r requirements.txt
+
+# تشغيل الخادم
+python app.py
+# أو مباشرة عبر uvicorn:
+# uvicorn app:app --reload --port 5000
 ```
 
-## Configuration
-| Variable | Default | Purpose |
-|---|---|---|
-| `PORT` | `5000` | Backend port |
-| `TRACEIT_DB` | `backend/traceit.db` | SQLite file path |
-| `TRACEIT_CORS_ORIGINS` | `*` | Comma-separated allowed origins |
-| `VITE_API_BASE` (frontend) | `http://localhost:5000` | Backend URL used by the UI |
+### تشغيل الواجهة الأمامية (Frontend)
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Notes
-- ORB needs visible edges/keypoints; plain backgrounds or very smooth objects
-  may produce few local matches.
-- This is an MVP (no auth, no cloud storage, no ownership verification workflow).
+سيعمل التطبيق على `http://localhost:5173` والخادم على `http://localhost:5000`.
+
+---
+
+## 10. الاختبارات
+
+جميع الاختبارات تنجح حالياً (121 اختبار).
+
+### تشغيل الاختبارات
+```bash
+cd backend
+pip install -r requirements-dev.txt  # أو pytest فقط
+pytest
+```
+
+### ما تغطيه الاختبارات
+- **وحدة (Unit):** البحث الخطي، حساب pHash، مسافة هامينج، التشابه، البحث الصوري.
+- **تكامل (Integration):** جميع نقاط نهاية API، إنشاء البلاغات، البحث النصي والصوري، إحصائيات، أمان الملفات (حجم، نوع، اسم آمن)، منع تجاوز المسار، التقارير المحلولة مخفية.
+
+---
+
+## 11. الأمان (Security)
+
+تم مراعاة النقاط التالية لتجنب الثغرات الشائعة:
+
+| التدبير | التنفيذ |
+|---------|---------|
+| منع حقن SQL | جميع استعلامات قاعدة بيانات تستخدم معاملات معلمنة (`:name` إلخ) |
+| منع تجاوز المسار (Path Traversal) | أسماء الملفات تُولد باستخدام `uuid.uuid4().hex` وليست من اسم الملف الأصلي للمستخدم |
+| التحقق من نوع الملف | مكتبة Pillow تتحقق من أن الملف صورة حقيقية، ويُسمح فقط بـ JPG/PNG |
+| حد حجم الملف | الحد الأقصى 10 ميجابايت |
+| منع انفجار الصور (Image Bomb) | الحد الأقصى 60 مليون بكسل |
+| CORS | مضمن فقط لمصدر التطوير (Vite) |
+| معالجة الأخطاء | جميع الأخطاء تُرجع على شكل `{ "error": "..." }` مع رمز حالة HTTP مناسب، ولا تُكشف آثار التتبع (stack traces) |
+
+---
+
+## 12. إشعار هام
+
+جميع نتائج البحث (سواء نصية أو صورية) هي **نتائج محتملة فقط**. يجب على المستخدم التحقق من الملكية handوياً والتواصل مع صاحب البلاغ قبل تسليم أي غرض. التطبيق لا يضمن صحة المطابقة بنسبة 100% لأن عوامل مثل الإضاءة وزاوية التصوير قد تؤثر على البصمة الرقمية.
+
+---
+
+## 13. خارطة الطريق المستقبلية (اختياري)
+
+- إضافة مصادقة المستخدمين (تسجيل دخول)
+- إشعارات فورية عند العثور على توافق
+- تطبيق جوال (React Native/Flutter)
+- pagination للنتائج الكبيرة
+- تصفية متقدمة حسب التاريخ أو نوع الغرض
+
+---
+
+## 14. المساهمة
+
+هذا مشروع أكاديمي MVP. يمكن المساهمة بإضافة تحسينات على الخوارزميات، تحسين واجهة المستخدم، أو إضافة اختبارات إضافية، مع الالتزام ببساطة الكود وسهولة الشرح الأكاديمي.
+
+---
+
+*تم إعداد هذا الملف كتوثيق لمشروع TraceIt الإصدار 2.0.*

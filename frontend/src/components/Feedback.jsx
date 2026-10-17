@@ -1,4 +1,5 @@
 import { Icon } from "./Icons.jsx";
+import { t } from "../i18n.jsx";
 
 /** Manual-verification notice (required wherever results are shown). */
 export function Disclaimer() {
@@ -6,9 +7,9 @@ export function Disclaimer() {
     <div className="flex items-start gap-3 border border-amber-400 bg-paper p-5 shadow-offset">
       <Icon name="warning" strokeWidth={2} className="mt-0.5 h-6 w-6 shrink-0 text-amber-600" />
       <div>
-        <div className="font-bold text-amber-800">النتائج معروضة كـ "محتملة"</div>
+        <div className="font-bold text-amber-800">{t("disclaimer.title")}</div>
         <div className="text-sm text-amber-700">
-          يجب التحقق من الملكية يدويًا والتواصل مع صاحب البلاغ قبل تسليم أي عنصر.
+          {t("disclaimer.text")}
         </div>
       </div>
     </div>

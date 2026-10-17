@@ -1,4 +1,6 @@
 // Single place that talks to the backend. Point it elsewhere with VITE_API_BASE.
+import { t } from "./i18n.jsx";
+
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 
 async function request(path, options) {
@@ -6,7 +8,7 @@ async function request(path, options) {
   try {
     res = await fetch(`${API_BASE}${path}`, options);
   } catch {
-    throw new Error("تعذر الاتصال بالخادم. تأكد من تشغيل الـ backend.");
+    throw new Error(t("api.error.connection"));
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);

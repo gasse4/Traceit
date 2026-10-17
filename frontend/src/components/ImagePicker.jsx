@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icons.jsx";
+import { t } from "../i18n.jsx";
 
 // Must match backend ALLOWED_FORMATS / MAX_IMAGE_BYTES.
 const ACCEPT = "image/jpeg,image/png";
@@ -22,8 +23,8 @@ export default function ImagePicker({ file, onChange, onError, label, aspect = "
     const next = e.target.files?.[0];
     e.target.value = ""; // allow picking the same file again
     if (!next) return;
-    if (!ACCEPT.split(",").includes(next.type)) return onError("الرجاء اختيار صورة بصيغة JPG أو PNG.");
-    if (next.size > MAX_BYTES) return onError("حجم الصورة يجب ألا يتجاوز 10 ميجابايت.");
+    if (!ACCEPT.split(",").includes(next.type)) return onError(t("picker.error.format"));
+    if (next.size > MAX_BYTES) return onError(t("picker.error.size"));
     onError("");
     onChange(next);
   }
@@ -42,7 +43,7 @@ export default function ImagePicker({ file, onChange, onError, label, aspect = "
             <div className="flex h-full flex-col items-center justify-center text-slate-400 transition-colors group-hover:text-slate-600">
               <Icon name="image" className="mb-2 h-9 w-9 opacity-60" />
               <span className="text-sm font-medium">{label}</span>
-              <span className="mt-1 text-xs">JPG / PNG · حتى 10MB</span>
+              <span className="mt-1 text-xs">{t("picker.hint")}</span>
             </div>
           )}
         </div>
@@ -59,7 +60,7 @@ export default function ImagePicker({ file, onChange, onError, label, aspect = "
             onClick={() => onChange(null)}
             className="absolute end-2 top-2 z-10 rounded bg-black/60 px-2 py-1 text-xs text-white hover:bg-black/80"
           >
-            إزالة
+            {t("picker.remove")}
           </button>
         )}
       </div>

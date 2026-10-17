@@ -4,21 +4,38 @@ import { api } from "../api.js";
 import { Icon } from "../components/Icons.jsx";
 import { Alert, EmptyState, Spinner } from "../components/Feedback.jsx";
 import ReportCard from "../components/ReportCard.jsx";
+import { t, useLanguage } from "../i18n.jsx";
 
 const STATS = [
-  { key: "total_reports", label: "إجمالي البلاغات", icon: "document" },
-  { key: "lost_reports", label: "بلاغات مفقودات", icon: "question" },
-  { key: "found_reports", label: "بلاغات موجودات", icon: "check" },
-  { key: "with_image", label: "بلاغات بصورة", icon: "image" },
+  { key: "total_reports", label: "home.stats.totalReports", icon: "document" },
+  { key: "lost_reports", label: "home.stats.lostReports", icon: "question" },
+  { key: "found_reports", label: "home.stats.foundReports", icon: "check" },
+  { key: "with_image", label: "home.stats.withImage", icon: "image" },
 ];
 
 const ACTIONS = [
-  { to: "/search", icon: "search", title: "البحث النصي", desc: "ابحث بالاسم، الوصف، المكان أو اللون" },
-  { to: "/search?tab=image", icon: "image", title: "البحث بالصورة", desc: "ارفع صورة وقارن بصمتها الرقمية" },
-  { to: "/report-lost", icon: "document", title: "إبلاغ جديد", desc: "سجل عنصرًا مفقودًا أو موجودًا بسهولة" },
+  {
+    to: "/search",
+    icon: "search",
+    title: "home.action.textSearch.title",
+    desc: "home.action.textSearch.desc",
+  },
+  {
+    to: "/search?tab=image",
+    icon: "image",
+    title: "home.action.imageSearch.title",
+    desc: "home.action.imageSearch.desc",
+  },
+  {
+    to: "/report-lost",
+    icon: "document",
+    title: "home.action.newReport.title",
+    desc: "home.action.newReport.desc",
+  },
 ];
 
 export default function Home() {
+  const { lang } = useLanguage();
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState([]);
   const [error, setError] = useState("");
@@ -34,11 +51,11 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <Spinner label="جاري تحميل البيانات…" />;
+  if (loading) return <Spinner label={t("home.loading")} />;
 
   return (
     <div className="space-y-10">
-      <Hero />
+      <Hero lang={lang} />
 
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -49,7 +66,7 @@ export default function Home() {
               <div className="mb-3 flex h-10 w-10 items-center justify-center border border-slate-300 bg-sand text-slate-600">
                 <Icon name={s.icon} />
               </div>
-              <div className="mb-1 text-xs font-semibold text-slate-500">{s.label}</div>
+              <div className="mb-1 text-xs font-semibold text-slate-500">{t(s.label)}</div>
               <div className="tnum text-3xl font-black">{stats[s.key]}</div>
             </div>
           ))}
@@ -66,32 +83,37 @@ export default function Home() {
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sand transition-transform group-hover:scale-110">
               <Icon name={a.icon} className="h-6 w-6" />
             </div>
-            <h3 className="mb-2 text-lg font-bold">{a.title}</h3>
-            <p className="text-sm leading-relaxed text-slate-600">{a.desc}</p>
+            <h3 className="mb-2 text-lg font-bold">{t(a.title)}</h3>
+            <p className="text-sm leading-relaxed text-slate-600">{t(a.desc)}</p>
           </Link>
         ))}
       </section>
 
       <section className="border-t border-slate-300 pt-8">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold">آخر البلاغات</h2>
+          <h2 className="text-xl font-bold">{t("home.latestReports")}</h2>
           <Link to="/search" className="text-sm font-medium hover:text-amber-700 hover:underline">
-            ابحث في الكل ←
+            {t("home.searchAll")}
           </Link>
         </div>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           {recent.length > 0 ? (
             recent.map((item) => <ReportCard key={item.id} item={item} />)
-          ) : (
-            !error && <EmptyState icon="document" title="لا توجد بلاغات بعد" desc="كن أول من يسجل بلاغًا." />
-          )}
+          ) : (!error && (
+            <EmptyState
+              icon="document"
+              title={t("home.empty.title")}
+              desc={t("home.empty.desc")}
+            />
+          ))}
         </div>
       </section>
     </div>
   );
 }
 
-function Hero() {
+function Hero({ lang }) {
+  const isRtl = lang === "ar";
   return (
     <section className="relative overflow-hidden rounded-[2rem] border border-slate-900 bg-ink text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
       <div className="absolute start-8 top-8 h-16 w-16 border-s border-t border-emerald-300/60" />
@@ -101,21 +123,21 @@ function Hero() {
         <div>
           <div className="mb-6 inline-flex items-center gap-3 border border-emerald-300/40 bg-emerald-300/10 px-3 py-2 text-xs font-bold text-emerald-200">
             <span className="h-2 w-2 rounded-full bg-emerald-300" />
-            TRACEIT / نظام التتبع الذكي
+            TRACEIT / {t("home.banner.title").split(" / ")[1]}
           </div>
           <h1 className="mb-5 max-w-2xl text-4xl font-black leading-[1.2] sm:text-6xl">
-            كل غرض له أثر.
-            <span className="mt-2 block text-amber-200">ابدأ بتتبّعه.</span>
+            {t("home.hero.title")}
+            <span className="mt-2 block text-amber-200">{t("home.hero.subtitle")}</span>
           </h1>
           <p className="mb-8 max-w-xl text-base leading-8 text-slate-300 sm:text-lg">
-            ابحث في بلاغات الحرم الجامعي بالنص أو الصورة، واترك المطابقة الذكية تقرّبك من صاحب الغرض الحقيقي.
+            {t("home.hero.desc")}
           </p>
           <div className="flex flex-wrap gap-3">
             <Link to="/search" className="inline-flex items-center gap-3 bg-amber-300 px-6 py-3.5 font-bold text-slate-950 transition-colors hover:bg-amber-200 active:scale-95">
-              ابدأ البحث <span aria-hidden="true">←</span>
+              {t("home.hero.btnSearch")}
             </Link>
             <Link to="/report-found" className="border border-white/30 px-6 py-3.5 font-semibold transition-colors hover:border-emerald-200 hover:bg-white/10 active:scale-95">
-              أبلغ عن غرض موجود
+              {t("home.hero.btnReportFound")}
             </Link>
           </div>
         </div>
@@ -135,10 +157,10 @@ function Hero() {
                 <div className="h-12 w-12 rotate-45 border-2 border-slate-700 bg-[#c8c1b2]" />
                 <span className="absolute bottom-1 left-1 font-mono text-[8px] text-slate-500">IMG_HASH</span>
               </div>
-              <div dir="rtl" className="text-right">
+              <div dir={isRtl ? "rtl" : "ltr"} className={isRtl ? "text-right" : "text-left"}>
                 <p className="mb-1 font-mono text-[10px] text-slate-500">OBJECT / FOUND</p>
-                <h2 className="text-xl font-black">مفتاح أسود</h2>
-                <p className="mt-2 text-xs leading-5 text-slate-600">مبنى الهندسة · البهو الرئيسي</p>
+                <h2 className="text-xl font-black">{t("home.sample.blackKey")}</h2>
+                <p className="mt-2 text-xs leading-5 text-slate-600">{t("home.sample.location")}</p>
               </div>
             </div>
             <div className="tnum grid grid-cols-2 gap-2 border-t border-slate-300 pt-3 font-mono text-[10px]">

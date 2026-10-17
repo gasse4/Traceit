@@ -1,7 +1,8 @@
 """Search and image-matching algorithms for TraceIt.
 
 Text uses a hand-written linear search. Image matching combines hand-written
-perceptual hashes with OpenCV ORB local-feature matching.
+perceptual hashing (pHash) + Hamming Distance with optional OpenCV ORB and
+CLIP embeddings for higher accuracy.
 """
 
 import math
@@ -95,26 +96,6 @@ def calculate_color_hash(img):
     return "".join(f"{int(channel) // 16:x}" for channel in average)
 
 
-def calculate_orb_similarity(query_img, candidate_img):
-    """Compare local ORB features and return a conservative 0-100 score."""
-    def descriptors(img):
-        pixels = np.asarray(img.convert("RGB"))
-        gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
-        return cv2.ORB_create(nfeatures=500).detectAndCompute(gray, None)
-
-    query_keypoints, query_descriptors = descriptors(query_img)
-    candidate_keypoints, candidate_descriptors = descriptors(candidate_img)
-    if query_descriptors is None or candidate_descriptors is None:
-        return 0.0
-
-    matches = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(
-        query_descriptors, candidate_descriptors, k=2
-    )
-    good_matches = [first for first, second in matches if first.distance < 0.75 * second.distance]
-    denominator = max(1, min(len(query_keypoints), len(candidate_keypoints)))
-    return round(min(100.0, len(good_matches) / denominator * 100.0), 2)
-
-
 def hamming_distance(hash1, hash2):
     """Count the bit positions that differ between two equal-length hex hashes.
 
@@ -134,6 +115,26 @@ def calculate_similarity(distance, bit_length):
     if not bit_length:
         return 0.0
     return round(100.0 - (distance / bit_length * 100.0), 2)
+
+
+def calculate_orb_similarity(query_img, candidate_img):
+    """Compare local ORB features and return a conservative 0-100 score."""
+    def descriptors(img):
+        pixels = np.asarray(img.convert("RGB"))
+        gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
+        return cv2.ORB_create(nfeatures=500).detectAndCompute(gray, None)
+
+    query_keypoints, query_descriptors = descriptors(query_img)
+    candidate_keypoints, candidate_descriptors = descriptors(candidate_img)
+    if query_descriptors is None or candidate_descriptors is None:
+        return 0.0
+
+    matches = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(
+        query_descriptors, candidate_descriptors, k=2
+    )
+    good_matches = [first for first, second in matches if first.distance < 0.75 * second.distance]
+    denominator = max(1, min(len(query_keypoints), len(candidate_keypoints)))
+    return round(min(100.0, len(good_matches) / denominator * 100.0), 2)
 
 
 def calculate_match_score(phash_distance, dhash_distance=None, color_distance=None):

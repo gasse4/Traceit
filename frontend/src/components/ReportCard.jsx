@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { Icon } from "./Icons.jsx";
+import { useLanguage } from "../i18n.jsx";
 
 // Similarity thresholds from PLAN.md § 7.2.
 function matchLevel(similarity) {
@@ -9,14 +10,15 @@ function matchLevel(similarity) {
 }
 
 // SQLite stores CURRENT_TIMESTAMP in UTC as "YYYY-MM-DD HH:MM:SS".
-function formatDate(value) {
+function formatDate(value, lang) {
   if (!value) return "";
   const date = new Date(value.replace(" ", "T") + "Z");
-  return date.toLocaleString("ar", { dateStyle: "medium", timeStyle: "short" });
+  return date.toLocaleString(lang === "ar" ? "ar" : "en", { dateStyle: "medium", timeStyle: "short" });
 }
 
 /** One lost/found report. Pass `item.similarity` (image search) to show the match score. */
 export default function ReportCard({ item }) {
+  const { t, lang } = useLanguage();
   const isFound = item.type === "found";
   const scored = item.similarity != null;
   const score = item.match_score ?? item.visual_similarity ?? item.similarity;
@@ -35,11 +37,11 @@ export default function ReportCard({ item }) {
           }`}
         >
           <Icon name={isFound ? "check" : "question"} className="h-3.5 w-3.5" strokeWidth={2} />
-          {isFound ? "موجود" : "مفقود"}
+          {isFound ? t("card.found") : t("card.lost")}
         </span>
         {scored && (
           <span className={`tnum rounded-full border px-2.5 py-1 text-xs font-bold ${level.badge}`}>
-            تطابق {score}%
+            {t("card.match", { score })}
           </span>
         )}
       </div>
@@ -72,15 +74,15 @@ export default function ReportCard({ item }) {
       <p className="mb-4 line-clamp-2 text-sm text-slate-600">{item.description}</p>
 
       <dl className="mt-auto grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-slate-500">
-        <Meta icon="location" label="المكان" value={item.location} />
-        <Meta icon="color" label="اللون" value={item.color} />
-        <Meta icon="time" label="التاريخ" value={formatDate(item.created_at)} className="col-span-2" />
+        <Meta icon="location" label={t("card.meta.location")} value={item.location} />
+        <Meta icon="color" label={t("card.meta.color")} value={item.color} />
+        <Meta icon="time" label={t("card.meta.date")} value={formatDate(item.created_at, lang)} className="col-span-2" />
       </dl>
 
       {scored && (
         <div className="mt-4 border-t border-slate-300 pt-3">
           <div className="mb-1.5 flex items-center justify-between text-xs text-slate-500">
-            <span>مسافة هامينج</span>
+            <span>{t("card.hamming")}</span>
             <span className="tnum font-mono">{item.hamming_distance} / 64</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden bg-slate-200">

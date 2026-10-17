@@ -13,6 +13,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Apply the stored language direction before React mounts to avoid a flash. -->
+    <script>
+      (function () {
+        try {
+          var lang = localStorage.getItem("traceit-lang") || "ar";
+          document.documentElement.lang = lang;
+          document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+        } catch (e) {
+          /* localStorage may be unavailable; keep the default ar / rtl. */
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -2,18 +2,21 @@ import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from "react-rou
 import Home from "./pages/Home.jsx";
 import ReportForm from "./pages/ReportForm.jsx";
 import SearchPage from "./pages/SearchPage.jsx";
+import LanguageToggle from "./components/LanguageToggle.jsx";
+import { t, useLanguage } from "./i18n.jsx";
 
 // Add a page: add it here and in <Routes> below.
 const NAV = [
-  { to: "/report-lost", label: "إبلاغ عن مفقود" },
-  { to: "/report-found", label: "إبلاغ عن موجود" },
-  { to: "/search", label: "البحث" },
+  { to: "/report-lost", key: "nav.reportLost" },
+  { to: "/report-found", key: "nav.reportFound" },
+  { to: "/search", key: "nav.search" },
 ];
 
 export default function App() {
+  const { lang } = useLanguage();
   return (
     <BrowserRouter>
-      <div className="flex min-h-screen flex-col antialiased selection:bg-amber-200">
+      <div className={`flex min-h-screen flex-col antialiased selection:bg-amber-200 ${lang === "ar" ? "rtl" : "ltr"}`}>
         <nav className="sticky top-0 z-40 border-b border-ink bg-paper">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
             <Link to="/" className="flex items-center gap-2 text-xl font-bold">
@@ -31,9 +34,10 @@ export default function App() {
                     }`
                   }
                 >
-                  {n.label}
+                  {t(n.key)}
                 </NavLink>
               ))}
+              <LanguageToggle />
             </div>
           </div>
         </nav>
@@ -51,8 +55,8 @@ export default function App() {
 
         <footer className="border-t border-slate-300 bg-paper">
           <div className="mx-auto max-w-7xl px-4 py-4 text-sm text-slate-600 sm:px-6">
-            <span className="font-semibold text-amber-700">ملاحظة: </span>
-            النتائج "محتملة" فقط، ويجب التحقق من الملكية يدويًا قبل التسليم.
+            <span className="font-semibold text-amber-700">{t("footer.note")}</span>
+            {t("footer.disclaimer")}
           </div>
         </footer>
       </div>

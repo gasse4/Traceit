@@ -4,13 +4,15 @@ import { api } from "../api.js";
 import { Alert, Disclaimer, EmptyState } from "../components/Feedback.jsx";
 import ImagePicker from "../components/ImagePicker.jsx";
 import ReportCard from "../components/ReportCard.jsx";
+import { useLanguage } from "../i18n.jsx";
 
 const TABS = [
-  { id: "text", label: "بحث نصي" },
-  { id: "image", label: "بحث بالصور" },
+  { id: "text", key: "search.tab.text" },
+  { id: "image", key: "search.tab.image" },
 ];
 
 export default function SearchPage() {
+  const { t } = useLanguage();
   // Active tab lives in the URL (?tab=image) so it can be linked and survives refresh.
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") === "image" ? "image" : "text";
@@ -20,17 +22,17 @@ export default function SearchPage() {
       <Disclaimer />
 
       <div role="tablist" className="flex gap-1 border-b border-slate-300 pb-3">
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <button
-            key={t.id}
+            key={tb.id}
             role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setParams(t.id === "text" ? {} : { tab: t.id }, { replace: true })}
+            aria-selected={tab === tb.id}
+            onClick={() => setParams(tb.id === "text" ? {} : { tab: tb.id }, { replace: true })}
             className={`px-6 py-3 font-semibold transition-all ${
-              tab === t.id ? "bg-ink text-amber-200 shadow-md" : "border border-slate-300 bg-sand text-slate-600 hover:bg-white"
+              tab === tb.id ? "bg-ink text-amber-200 shadow-md" : "border border-slate-300 bg-sand text-slate-600 hover:bg-white"
             }`}
           >
-            {t.label}
+            {t(tb.key)}
           </button>
         ))}
       </div>
@@ -55,6 +57,7 @@ function ResultsGrid({ results, empty }) {
 }
 
 function TextSearch() {
+  const { t } = useLanguage();
   const [query, setQuery] = useState("");
   const [searched, setSearched] = useState(null); // last submitted query
   const [results, setResults] = useState([]);
@@ -85,27 +88,27 @@ function TextSearch() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="ابحث بالاسم، الوصف، المكان أو اللون…"
-          aria-label="نص البحث"
+          placeholder={t("search.placeholder")}
+          aria-label={t("search.ariaLabel")}
           className="flex-1 border border-slate-300 bg-field px-5 py-4 transition-all focus:border-ink focus:outline-none focus:ring-2 focus:ring-amber-300"
         />
         <button type="submit" disabled={loading || !query.trim()} className="bg-ink px-8 py-4 font-semibold text-amber-200 transition-all hover:bg-ink-soft active:scale-95 disabled:opacity-60">
-          {loading ? "جارٍ البحث…" : "بحث"}
+          {loading ? t("search.searching") : t("search.search")}
         </button>
       </form>
 
       {error && <Alert kind="error">{error}</Alert>}
       {searched !== null && (
         <p className="tnum text-sm text-slate-500">
-          {results.length} نتيجة لـ "{searched}"
+          {t("search.resultsCount", { count: results.length, query: searched })}
         </p>
       )}
       <ResultsGrid
         results={results}
         empty={
           searched === null
-            ? { icon: "search", title: "ابدأ بالبحث", desc: "أدخل كلمة مفتاحية للبحث عن المفقودات." }
-            : { icon: "search", title: "لا توجد نتائج", desc: "جرب كلمة مفتاحية مختلفة أو ابحث بالصورة." }
+            ? { icon: "search", title: t("search.empty.start.title"), desc: t("search.empty.start.desc") }
+            : { icon: "search", title: t("search.empty.none.title"), desc: t("search.empty.none.desc") }
         }
       />
     </div>
@@ -113,6 +116,7 @@ function TextSearch() {
 }
 
 function ImageSearch() {
+  const { t } = useLanguage();
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null); // { query_phash, results }
   const [loading, setLoading] = useState(false);
@@ -141,16 +145,16 @@ function ImageSearch() {
     <div className="space-y-6">
       <div className="flex max-w-2xl flex-col items-stretch gap-4 sm:flex-row sm:items-center">
         <div className="w-full sm:w-72">
-          <ImagePicker file={file} onChange={onPick} onError={setError} label="ارفع صورة العنصر" aspect="aspect-square" />
+          <ImagePicker file={file} onChange={onPick} onError={setError} label={t("search.image.pickerLabel")} aspect="aspect-square" />
         </div>
         <div className="flex-1 space-y-3">
           <button onClick={onSearch} disabled={loading || !file} className="w-full bg-ink py-4 font-semibold text-amber-200 transition-all hover:bg-ink-soft active:scale-95 disabled:opacity-60">
-            {loading ? "جارٍ حساب البصمة والمقارنة…" : "مقارنة الصور"}
+            {loading ? t("search.image.computing") : t("search.image.compare")}
           </button>
           {result && (
             <div className="flex items-center gap-2 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
               <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-600" />
-              بصمة الصورة (pHash):
+              {t("search.image.fingerprint")}
               <code dir="ltr" className="font-mono">{result.query_phash}</code>
             </div>
           )}
@@ -161,7 +165,7 @@ function ImageSearch() {
       {result && (
         <ResultsGrid
           results={result.results}
-          empty={{ icon: "image", title: "لا توجد صور للمقارنة", desc: "لا توجد بلاغات تحتوي على صور بعد. جرب البحث النصي." }}
+          empty={{ icon: "image", title: t("search.image.empty.title"), desc: t("search.image.empty.desc") }}
         />
       )}
     </div>
