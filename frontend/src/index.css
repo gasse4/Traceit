@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: toggle the `dark` class on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * Design tokens — change the look of the whole app from here.
  * Each token becomes a Tailwind utility: --color-ink -> bg-ink / text-ink / border-ink.
@@ -8,8 +11,10 @@
   --font-sans: "Readex Pro", "Cairo", "Inter", system-ui, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  --color-ink: #10243b;        /* primary: text, nav, buttons */
+  --color-ink: #10243b;        /* primary text & borders */
   --color-ink-soft: #1d3b5b;   /* primary hover */
+  --color-inverse: #10243b;    /* dark surface: buttons, active nav (stays dark in dark mode) */
+  --color-inverse-soft: #1d3b5b; /* dark surface hover */
   --color-canvas: #f1eee6;     /* page background */
   --color-paper: #f7f4ec;      /* cards and panels */
   --color-sand: #e9e4d8;       /* muted fills, placeholders */
@@ -18,6 +23,75 @@
 
   --shadow-offset: 6px 6px 0 var(--color-gold);
   --shadow-offset-lg: 9px 9px 0 var(--color-gold);
+}
+
+/* --------------------------------------------------------------------------
+ * Dark mode — grey palette.
+ * Overrides the design tokens above plus Tailwind's default slate / amber /
+ * emerald / red scales so every utility (bg-slate-200, text-emerald-800 …)
+ * automatically uses the dark value.
+ * ------------------------------------------------------------------------ */
+.dark {
+  /* Core tokens — light warm tones flip to neutral greys. */
+  --color-ink: #e5e5e5;
+  --color-ink-soft: #cfcfcf;
+  --color-inverse: #3a3a3a;
+  --color-inverse-soft: #4a4a4a;
+  --color-canvas: #141414;
+  --color-paper: #212121;
+  --color-sand: #333333;
+  --color-field: #1a1a1a;
+  --color-gold: #c9a445;
+
+  /* Slate — full flip (light backgrounds become dark, dark text becomes light).
+   * slate-950 stays dark because it is used as text on amber buttons. */
+  --color-slate-50: #171717;
+  --color-slate-100: #1f1f1f;
+  --color-slate-200: #2b2b2b;
+  --color-slate-300: #3d3d3d;
+  --color-slate-400: #5c5c5c;
+  --color-slate-500: #8a8a8a;
+  --color-slate-600: #b5b5b5;
+  --color-slate-700: #d4d4d4;
+  --color-slate-800: #e2e2e2;
+  --color-slate-900: #ededed;
+  --color-slate-950: #0a0a0a;
+
+  /* Amber — backgrounds go dark, text goes bright. */
+  --color-amber-50: #1c1504;
+  --color-amber-100: #332500;
+  --color-amber-200: #f5c842;
+  --color-amber-300: #eab52e;
+  --color-amber-400: #d49a20;
+  --color-amber-500: #b8860b;
+  --color-amber-600: #e8a838;
+  --color-amber-700: #d9a845;
+  --color-amber-800: #f5c842;
+  --color-amber-900: #f7d96e;
+
+  /* Emerald — backgrounds go dark, text goes bright. */
+  --color-emerald-50: #052e16;
+  --color-emerald-100: #14532d;
+  --color-emerald-200: #166534;
+  --color-emerald-300: #2d6b3e;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #4ade80;
+  --color-emerald-800: #4ade80;
+  --color-emerald-900: #86efac;
+
+  /* Red — same inversion pattern. */
+  --color-red-50: #450a0a;
+  --color-red-100: #7f1d1d;
+  --color-red-200: #991b1b;
+  --color-red-300: #dc2626;
+  --color-red-400: #f87171;
+  --color-red-500: #f87171;
+  --color-red-600: #dc2626;
+  --color-red-700: #f87171;
+  --color-red-800: #fca5a5;
+  --color-red-900: #fecaca;
 }
 
 body {

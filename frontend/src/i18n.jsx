@@ -20,6 +20,7 @@ const translations = {
     "nav.reportFound": "إبلاغ عن موجود",
     "nav.search": "البحث",
     "nav.language": "تغيير اللغة",
+    "nav.theme": "تبديل الوضع الليلي",
 
     /* --- Footer --- */
     "footer.note": "ملاحظة: ",
@@ -135,6 +136,7 @@ const translations = {
     "nav.reportFound": "Report Found",
     "nav.search": "Search",
     "nav.language": "Change language",
+    "nav.theme": "Toggle dark mode",
 
     /* --- Footer --- */
     "footer.note": "Note: ",

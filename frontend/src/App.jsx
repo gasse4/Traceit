@@ -3,6 +3,7 @@ import Home from "./pages/Home.jsx";
 import ReportForm from "./pages/ReportForm.jsx";
 import SearchPage from "./pages/SearchPage.jsx";
 import LanguageToggle from "./components/LanguageToggle.jsx";
+import ThemeToggle from "./components/ThemeToggle.jsx";
 import { t, useLanguage } from "./i18n.jsx";
 
 // Add a page: add it here and in <Routes> below.
@@ -20,7 +21,7 @@ export default function App() {
         <nav className="sticky top-0 z-40 border-b border-ink bg-paper">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
             <Link to="/" className="flex items-center gap-2 text-xl font-bold">
-              <span className="bg-ink px-2.5 py-1 font-mono text-sm text-amber-200">TraceIt</span>
+              <span className="bg-inverse px-2.5 py-1 font-mono text-sm text-amber-200">TraceIt</span>
               <span className="hidden font-mono text-xs tracking-widest text-slate-500 md:inline">/ FIND WHAT MATTERS</span>
             </Link>
             <div className="ms-auto flex flex-wrap items-center gap-1 sm:gap-2">
@@ -30,7 +31,7 @@ export default function App() {
                   to={n.to}
                   className={({ isActive }) =>
                     `px-3 py-2 text-sm font-medium transition-colors ${
-                      isActive ? "bg-ink text-amber-200" : "text-slate-600 hover:bg-sand hover:text-ink"
+                      isActive ? "bg-inverse text-amber-200" : "text-slate-600 hover:bg-sand hover:text-ink"
                     }`
                   }
                 >
@@ -38,6 +39,7 @@ export default function App() {
                 </NavLink>
               ))}
               <LanguageToggle />
+              <ThemeToggle />
             </div>
           </div>
         </nav>

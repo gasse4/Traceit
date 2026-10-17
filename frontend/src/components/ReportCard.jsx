@@ -65,7 +65,7 @@ export default function ReportCard({ item }) {
             <Icon name="document" className="h-10 w-10" />
           </div>
         )}
-        <span className="tnum absolute bottom-2 start-2 bg-ink px-2 py-1 font-mono text-[10px] text-amber-200">
+        <span className="tnum absolute bottom-2 start-2 bg-inverse px-2 py-1 font-mono text-[10px] text-amber-200">
           #{item.id}
         </span>
       </div>

@@ -115,7 +115,7 @@ export default function Home() {
 function Hero({ lang }) {
   const isRtl = lang === "ar";
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-slate-900 bg-ink text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
+    <section className="relative overflow-hidden rounded-[2rem] border border-slate-900 bg-inverse text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
       <div className="absolute start-8 top-8 h-16 w-16 border-s border-t border-emerald-300/60" />
       <div className="absolute bottom-8 end-8 h-16 w-16 border-e border-b border-amber-300/60" />
 
@@ -144,7 +144,7 @@ function Hero({ lang }) {
 
         {/* Illustration of how a match record looks (static sample, not real data). */}
         <div className="relative mx-auto w-full max-w-md" dir="ltr" aria-hidden="true">
-          <div className="absolute -left-3 -top-3 border border-amber-300/60 bg-ink px-3 py-1 font-mono text-[10px] tracking-[0.2em] text-amber-200">
+          <div className="absolute -left-3 -top-3 border border-amber-300/60 bg-inverse px-3 py-1 font-mono text-[10px] tracking-[0.2em] text-amber-200">
             SAMPLE / 01
           </div>
           <div className="border border-slate-300/40 bg-paper p-4 text-slate-900 shadow-[12px_12px_0_var(--color-gold)]">

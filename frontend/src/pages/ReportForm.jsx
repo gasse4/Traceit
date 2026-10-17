@@ -83,7 +83,7 @@ export default function ReportForm({ type }) {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-2xl bg-ink py-4 text-lg font-bold text-amber-200 shadow-lg transition-all hover:bg-ink-soft active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-white"
+          className="w-full rounded-2xl bg-inverse py-4 text-lg font-bold text-amber-200 shadow-lg transition-all hover:bg-inverse-soft active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-white"
         >
           {submitting ? t("form.submitting") : t("form.submit")}
         </button>

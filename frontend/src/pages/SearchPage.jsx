@@ -29,7 +29,7 @@ export default function SearchPage() {
             aria-selected={tab === tb.id}
             onClick={() => setParams(tb.id === "text" ? {} : { tab: tb.id }, { replace: true })}
             className={`px-6 py-3 font-semibold transition-all ${
-              tab === tb.id ? "bg-ink text-amber-200 shadow-md" : "border border-slate-300 bg-sand text-slate-600 hover:bg-white"
+              tab === tb.id ? "bg-inverse text-amber-200 shadow-md" : "border border-slate-300 bg-sand text-slate-600 hover:bg-slate-100"
             }`}
           >
             {t(tb.key)}
@@ -92,7 +92,7 @@ function TextSearch() {
           aria-label={t("search.ariaLabel")}
           className="flex-1 border border-slate-300 bg-field px-5 py-4 transition-all focus:border-ink focus:outline-none focus:ring-2 focus:ring-amber-300"
         />
-        <button type="submit" disabled={loading || !query.trim()} className="bg-ink px-8 py-4 font-semibold text-amber-200 transition-all hover:bg-ink-soft active:scale-95 disabled:opacity-60">
+        <button type="submit" disabled={loading || !query.trim()} className="bg-inverse px-8 py-4 font-semibold text-amber-200 transition-all hover:bg-inverse-soft active:scale-95 disabled:opacity-60">
           {loading ? t("search.searching") : t("search.search")}
         </button>
       </form>
@@ -148,7 +148,7 @@ function ImageSearch() {
           <ImagePicker file={file} onChange={onPick} onError={setError} label={t("search.image.pickerLabel")} aspect="aspect-square" />
         </div>
         <div className="flex-1 space-y-3">
-          <button onClick={onSearch} disabled={loading || !file} className="w-full bg-ink py-4 font-semibold text-amber-200 transition-all hover:bg-ink-soft active:scale-95 disabled:opacity-60">
+          <button onClick={onSearch} disabled={loading || !file} className="w-full bg-inverse py-4 font-semibold text-amber-200 transition-all hover:bg-inverse-soft active:scale-95 disabled:opacity-60">
             {loading ? t("search.image.computing") : t("search.image.compare")}
           </button>
           {result && (
