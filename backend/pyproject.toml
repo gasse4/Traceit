@@ -7,6 +7,16 @@ name = "traceit-api"
 version = "1.0.0"
 description = "TraceIt lost-and-found image search API"
 requires-python = ">=3.12,<3.15"
+dependencies = [
+    "fastapi==0.143.3",
+    "uvicorn[standard]==0.54.0",
+    "python-multipart==0.0.32",
+    "Pillow==13.0.0",
+    "numpy==2.5.4",
+    "opencv-python-headless==4.13.0.92",
+    "torch==2.10.0+cpu",
+    "transformers==5.1.0",
+]
 
 [tool.setuptools]
 py-modules = ["algorithms", "app", "database", "embeddings"]
